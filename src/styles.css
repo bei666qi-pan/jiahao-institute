@@ -140,6 +140,7 @@ button:disabled { cursor: wait; opacity: .7; }
 .result-hero { max-width: 1480px; margin: 0 auto; padding: 36px clamp(24px, 4vw, 60px) 52px; border-inline: var(--line); background: radial-gradient(circle at 53% 32%, rgba(47,123,255,.11), transparent 30%); }
 .result-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
 .completion-mark { color: var(--signal); font-size: 17px; font-weight: 1000; }
+.completion-mark em { margin-left: 12px; padding: 5px 8px; border: 1px solid rgba(115,215,255,.24); border-radius: 5px; color: var(--blue); font-size: 10px; font-style: normal; font-weight: 600; }
 .top-reset { min-height: 46px; padding: 8px 18px; font-size: 14px; }
 .result-grid { display: grid; grid-template-columns: 1.04fr .86fr .62fr; gap: 14px; min-height: 690px; }
 .score-block { position: relative; padding: 34px 30px; border: 1px solid rgba(115,215,255,.2); border-radius: 11px; background: rgba(12,22,37,.52); overflow: hidden; }

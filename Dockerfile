@@ -1,5 +1,4 @@
 ARG NODE_IMAGE=docker.m.daocloud.io/library/node:22-alpine
-ARG NGINX_IMAGE=docker.m.daocloud.io/library/nginx:1.27-alpine
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
@@ -8,8 +7,12 @@ RUN npm config set registry https://registry.npmmirror.com && npm install
 COPY . .
 RUN npm run build
 
-FROM ${NGINX_IMAGE}
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node server.mjs ./server.mjs
+USER node
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD wget -q -O - http://127.0.0.1:8080/healthz || exit 1
+HEALTHCHECK --interval=15s --timeout=4s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node", "server.mjs"]
