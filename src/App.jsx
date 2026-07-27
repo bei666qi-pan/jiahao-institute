@@ -149,6 +149,49 @@ function analyze(input, mode, files) {
     comment: `你并没有主动展示豪气，但${sorted[0].label}已经从内容边缘自然溢出。${sorted[1].label}与${sorted[2].label}完成闭环，最终呈现为“${type}”。建议保持现状，再刻意一点可能就不自然了。`,
     createdAt: Date.now(),
     mode,
+    source: '本地备用算法',
+  };
+}
+
+async function fileToModelImage(file) {
+  const bitmap = await createImageBitmap(file);
+  const maxEdge = 1280;
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL('image/jpeg', 0.78);
+}
+
+async function analyzeWithCloud(input, mode, files) {
+  const images = mode === 'text' ? [] : await Promise.all(files.map(fileToModelImage));
+  const response = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: input.trim(), mode, images }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || '云端大模型暂时不可用');
+  }
+  const payload = await response.json();
+  const dimensions = Object.fromEntries(DIMENSION_META.map(([key]) => [key, clamp(payload.dimensions?.[key], 0, 100)]));
+  const top = DIMENSION_META.map(([key, label]) => ({ key, label, value: dimensions[key] })).sort((a, b) => b.value - a.value).slice(0, 3);
+  const raw = mode === 'text' ? input.trim() : files.map((file) => `${file.name}-${file.size}`).join('|');
+  return {
+    ...payload,
+    id: `嘉豪-${String(hashString(`${mode}:${raw}`)).slice(0, 8).padStart(8, '0')}`,
+    score: clamp(payload.score, 0, 100),
+    dimensions,
+    top,
+    traits: Array.isArray(payload.traits) ? payload.traits.slice(0, 4) : ['豪气在线', '细节埋点', '等待追问', '稳定发挥'],
+    evidence: Array.isArray(payload.evidence) ? payload.evidence.slice(0, 3) : [],
+    source: payload.source || '云端大模型',
+    createdAt: Date.now(),
+    mode,
   };
 }
 
@@ -308,7 +351,7 @@ function AssayForm({ onResult, addHistory }) {
   const [mode, setMode] = useState('text');
   const [input, setInput] = useState(EXAMPLES[0]);
   const [files, setFiles] = useState([]);
-  const [consent, setConsent] = useState(true);
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [step, setStep] = useState(0);
@@ -322,7 +365,7 @@ function AssayForm({ onResult, addHistory }) {
     else { setFiles(accepted.slice(0, limit)); setError(''); }
   };
 
-  const start = () => {
+  const start = async () => {
     if (!consent) return setError('请先确认内容使用权限与娱乐分析说明。');
     if (mode === 'text' && input.trim().length < 5) return setError('至少输入 5 个字，豪气才有迹可循。');
     if (mode !== 'text' && files.length === 0) return setError('先上传素材，鉴定仪还不能隔空捕捉豪气。');
@@ -330,14 +373,21 @@ function AssayForm({ onResult, addHistory }) {
     setAnalyzing(true);
     setStep(0);
     const timer = window.setInterval(() => setStep((value) => Math.min(value + 1, ANALYSIS_STEPS.length - 1)), 520);
+    const startedAt = Date.now();
+    let result;
+    try {
+      result = await analyzeWithCloud(input, mode, files);
+    } catch {
+      result = analyze(input, mode, files);
+    }
+    const remainingDelay = Math.max(0, 2600 - (Date.now() - startedAt));
     window.setTimeout(() => {
       window.clearInterval(timer);
-      const result = analyze(input, mode, files);
       addHistory(result);
       setAnalyzing(false);
       onResult(result);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 2850);
+    }, remainingDelay);
   };
 
   return (
@@ -369,7 +419,7 @@ function AssayForm({ onResult, addHistory }) {
         )}
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={mode === 'chat'} hidden onChange={(event) => onFiles(event.target.files)} />
       </div>
-      <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我确认拥有内容使用权限；由本地娱乐算法分析，不会上传。</label>
+      <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我同意将内容发送至云端大模型做娱乐分析；本站不保存内容。</label>
       {error && <p className="form-error" role="alert">鉴定中止 / {error}</p>}
       <button className="primary-action" onClick={start} disabled={analyzing}>{analyzing ? ANALYSIS_STEPS[step] : <>开始鉴定 <Icon name="arrow" size={26} /></>}</button>
       {analyzing && <span className="sr-only" role="status" aria-live="polite">{ANALYSIS_STEPS[step]}</span>}
@@ -429,7 +479,7 @@ function Result({ result, onReset, onPoster }) {
   return (
     <main className="result-page">
       <section className="result-hero">
-        <div className="result-heading"><span className="completion-mark">/// 鉴定完成</span><button className="secondary-action top-reset" onClick={onReset}>再测一次 <Icon name="reset" size={18} /></button></div>
+        <div className="result-heading"><span className="completion-mark">/// 鉴定完成 <em>{result.source || '本地备用算法'}</em></span><button className="secondary-action top-reset" onClick={onReset}>再测一次 <Icon name="reset" size={18} /></button></div>
         <div className="result-grid">
           <div className="score-block"><small>嘉豪指数</small><div className="score"><AnimatedNumber value={result.score} /><em>/100</em></div><div className="approval-stamp">鉴定通过</div><small>嘉豪物种</small><h1>{result.type}</h1><div className="verdict"><span>鉴定结论</span><strong>{result.verdict}</strong></div><div className="trait-signals" aria-label="捕获到的嘉豪特征">{(result.traits || ['信号稳定', '豪气待复核']).map((trait) => <span key={trait}>{trait}</span>)}</div></div>
           <div className="dimension-block"><h2>六维豪气分析</h2><Radar dimensions={result.dimensions} />
@@ -488,7 +538,7 @@ export default function App() {
     <div className="app-shell">
       <Header onHistory={() => setHistoryOpen(true)} />
       {result ? <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Home onResult={setResult} addHistory={add} />}
-      <footer><strong>嘉豪鉴定所</strong><span>© {year} 嘉豪鉴定开源实验项目</span><span>本地娱乐算法 · 不上传内容 · 不构成任何事实判断</span></footer>
+      <footer><strong>嘉豪鉴定所</strong><span>© {year} 嘉豪鉴定开源实验项目</span><span>大模型娱乐生成 · 本站不保存内容 · 不构成任何事实判断</span></footer>
       {posterOpen && <PosterModal result={result} onClose={() => setPosterOpen(false)} />}
       {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onSelect={(item) => { setResult(item); window.scrollTo({ top: 0 }); }} onClear={clear} />}
     </div>
