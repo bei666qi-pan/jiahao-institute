@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 
 const SITE_URL = 'https://jiahao.versecraft.cn';
+const ASSET_BASE_URL = (import.meta.env.VITE_ASSET_BASE_URL || 'https://assets.versecraft.cn/jiahao').replace(/\/$/, '');
 
 const MODES = [
   { id: 'text', label: '文字鉴定', hint: '输入朋友圈文案、签名或你想说的一句话' },
@@ -10,15 +11,15 @@ const MODES = [
 ];
 
 const SPECIES = [
-  { name: '自在极意豪', en: '极意形态', asset: '/assets/jiahao-species-blue.png', crop: '0% center', summary: '豪气自行运转，万物皆可成为舞台。', clue: '黑口罩、苹果耳机、低头侧脸；越不解释越有戏。' },
-  { name: '美式嘉豪', en: '潮流形态', asset: '/assets/jiahao-species-blue.png', crop: '50% center', summary: '墨镜一戴，自以为很潮的松弛感开始接管画面。', clue: '棒球夹克、冰美式，走两步就像在拍音乐短片。' },
-  { name: '深情破碎豪', en: '深夜形态', asset: '/assets/jiahao-species-blue.png', crop: '100% center', summary: '嘴上说无所谓，歌单已经循环八遍。', clue: '深夜、侧脸，以及没发出去的长文。' },
-  { name: '计算机嘉豪', en: '终端形态', asset: '/assets/jiahao-species-labs.png', crop: '0% center', summary: '终端常驻，配置单和键盘轴体张口就来。', clue: '不一定在写代码，但一定在讲底层。' },
-  { name: '股票嘉豪', en: '行情形态', asset: '/assets/jiahao-species-labs.png', crop: '50% center', summary: '行情线一开口，宏观叙事自动生成。', clue: '涨了“早就说了”，跌了“长期价值”。' },
-  { name: '不懂装懂豪', en: '抽象形态', asset: '/assets/jiahao-species-labs.png', crop: '100% center', summary: '术语密度拉满，细问就是底层逻辑。', clue: '闭环、赋能、认知差，主打一个语义防御。' },
-  { name: '小众优越豪', en: '冷门形态', asset: '/assets/jiahao-species-blue.png', crop: '50% center', summary: '不是冷门，只是你们暂时还没听懂。', clue: '越不解释，越等待别人追问。' },
-  { name: '潜伏嘉豪', en: '静默形态', asset: '/assets/jiahao-species-blue.png', crop: '100% center', summary: '表面风平浪静，细节里全是豪气伏笔。', clue: '一句“随便”里藏着十八层构图。' },
-  { name: '反向嘉豪', en: '反向形态', asset: '/assets/jiahao-species-blue.png', crop: '0% center', summary: '越是否认自己嘉豪，豪气越难以隐藏。', clue: '我真没装——通常是最响的前奏。' },
+  { name: '自在极意豪', en: '极意形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '0% center', summary: '豪气自行运转，万物皆可成为舞台。', clue: '黑口罩、苹果耳机、低头侧脸；越不解释越有戏。' },
+  { name: '美式嘉豪', en: '潮流形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '50% center', summary: '墨镜一戴，自以为很潮的松弛感开始接管画面。', clue: '棒球夹克、冰美式，走两步就像在拍音乐短片。' },
+  { name: '深情破碎豪', en: '深夜形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '100% center', summary: '嘴上说无所谓，歌单已经循环八遍。', clue: '深夜、侧脸，以及没发出去的长文。' },
+  { name: '计算机嘉豪', en: '终端形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, crop: '0% center', summary: '终端常驻，配置单和键盘轴体张口就来。', clue: '不一定在写代码，但一定在讲底层。' },
+  { name: '股票嘉豪', en: '行情形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, crop: '50% center', summary: '行情线一开口，宏观叙事自动生成。', clue: '涨了“早就说了”，跌了“长期价值”。' },
+  { name: '不懂装懂豪', en: '抽象形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, crop: '100% center', summary: '术语密度拉满，细问就是底层逻辑。', clue: '闭环、赋能、认知差，主打一个语义防御。' },
+  { name: '小众优越豪', en: '冷门形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '50% center', summary: '不是冷门，只是你们暂时还没听懂。', clue: '越不解释，越等待别人追问。' },
+  { name: '潜伏嘉豪', en: '静默形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '100% center', summary: '表面风平浪静，细节里全是豪气伏笔。', clue: '一句“随便”里藏着十八层构图。' },
+  { name: '反向嘉豪', en: '反向形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '0% center', summary: '越是否认自己嘉豪，豪气越难以隐藏。', clue: '我真没装——通常是最响的前奏。' },
 ];
 
 const DIMENSION_META = [
@@ -441,7 +442,7 @@ function Home({ onResult, addHistory }) {
           <h1>你身上，<br />到底有多少豪气？</h1>
           <p>输入一句话，鉴定你的嘉豪浓度、物种与隐藏天赋。</p>
         </div>
-        <div className="hero-scan" aria-hidden="true"><span>豪气波形<br />锁定中……</span><i /></div>
+        <div className="hero-scan" style={{ '--hero-image': `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} aria-hidden="true"><span>豪气波形<br />锁定中……</span><i /></div>
         <AssayForm onResult={onResult} addHistory={addHistory} />
         <Scale />
         <div className="document-meta"><span>娱乐档案<br /><b>仅供鉴定娱乐使用</b></span><span className="barcode" /><span>嘉豪鉴定样本<br /><b>请勿过度当真</b></span></div>
