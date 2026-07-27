@@ -5,6 +5,7 @@ import { decideFallbackWinner } from './validation';
 
 const SITE_URL = 'https://jiahao.versecraft.cn';
 const ASSET_BASE_URL = (import.meta.env.VITE_ASSET_BASE_URL || 'https://assets.versecraft.cn/jiahao').replace(/\/$/, '');
+const MODEL_FALLBACK_NOTICE = '云端大模型太火爆，暂时用豪之算法进行计算';
 
 const MODES = [
   { id: 'photo', label: '照片鉴定', hint: '上传一张最有感觉的照片' },
@@ -65,6 +66,7 @@ function Icon({ name, size = 20 }) {
     camera: <><path d="M8 5 9.5 3h5L16 5h3a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z"/><circle cx="12" cy="13" r="4"/></>,
     file: <><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6M9 17h6"/></>,
     sword: <><path d="m14 4 6 6-9 9-6 1 1-6z"/><path d="m13 5 6 6M4 4l16 16"/></>,
+    spark: <><path d="m12 3 1.4 4.6L18 9l-4.6 1.4L12 15l-1.4-4.6L6 9l4.6-1.4z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14"/></>,
   };
@@ -158,7 +160,7 @@ function analyze(input, mode, files) {
     comment: `你并没有主动展示豪气，但${sorted[0].label}已经从内容边缘自然溢出。${sorted[1].label}与${sorted[2].label}完成闭环，最终呈现为“${type}”。建议保持现状，再刻意一点可能就不自然了。`,
     createdAt: Date.now(),
     mode,
-    source: '本地备用算法',
+    source: '豪之算法',
   };
 }
 
@@ -207,7 +209,8 @@ function makeFallbackPk(participants) {
       title: winner === 'tie' ? '豪气同频' : `${winningName} 胜出`,
       reason: winner === 'tie' ? '双方豪气强度几乎一致，这场对决暂时难分高下。' : `${winningName} 的综合豪气信号更稳定，在六维扫描中占据上风。`,
       decisiveDimensions: results[0].top.slice(0, 2).map((item) => item.label),
-      source: '本地备用裁决',
+      source: '豪之算法',
+      fallbackNotice: MODEL_FALLBACK_NOTICE,
     },
     id: `嘉豪-PK-${String(hashString(results.map((item) => item.id).join(':'))).slice(0, 8)}`,
     createdAt: Date.now(),
@@ -250,6 +253,19 @@ function Radar({ dimensions, compact = false }) {
       <polygon points={values.map((v, i) => point(i, v)).join(' ')} fill="var(--signal)" fillOpacity=".2" stroke="var(--signal)" strokeWidth="3" />
       {values.map((v, i) => { const [cx, cy] = point(i, v).split(','); return <circle key={i} cx={cx} cy={cy} r="4" fill="var(--paper)" stroke="var(--signal)" strokeWidth="2" />; })}
     </svg>
+  );
+}
+
+function ModelSourceNotice({ source, fallbackNotice }) {
+  const isFallback = Boolean(fallbackNotice);
+  return (
+    <div className={`model-source-notice ${isFallback ? 'is-fallback' : 'is-cloud'}`} role="status">
+      <Icon name={isFallback ? 'spark' : 'check'} size={18} />
+      <div>
+        <strong>{isFallback ? fallbackNotice : '云端分析已完成'}</strong>
+        <span>{isFallback ? '结果由浏览器内的豪之算法即时生成，未伪装成云端模型输出。' : `本次结果由${source || '云端大模型'}实时生成。`}</span>
+      </div>
+    </div>
   );
 }
 
@@ -532,7 +548,12 @@ function AssayForm({ onResult, addHistory, mode, onModeChange }) {
       const prepared = mode === 'text' ? null : await prepareFiles(files);
       setNotes(prepared?.notes || []);
       try { result = await analyzeWithCloud(input, mode, files, prepared); }
-      catch { result = analyze(mode === 'chat' ? prepared.extractedText : input, mode, files); }
+      catch {
+        result = {
+          ...analyze(mode === 'chat' ? prepared.extractedText : input, mode, files),
+          fallbackNotice: MODEL_FALLBACK_NOTICE,
+        };
+      }
     } catch (reason) { window.clearInterval(timer); setAnalyzing(false); return setError(reason.message || '素材解析失败，请检查文件后重试。'); }
     const remainingDelay = Math.max(0, 2200 - (Date.now() - startedAt));
     window.setTimeout(() => { window.clearInterval(timer); addHistory(result); setAnalyzing(false); onResult(result); window.scrollTo({ top: 0, behavior: 'smooth' }); }, remainingDelay);
@@ -628,7 +649,7 @@ function SpeciesGallery({ selected }) {
 
 function PkResult({ result, onReset, onPoster }) {
   const winnerIndex = result.battle.winner === 'A' ? 0 : result.battle.winner === 'B' ? 1 : -1;
-  return <main className="pk-result-page"><section className="pk-result-hero"><div className="result-heading"><span className="completion-mark">/// PK 裁决完成 <em>{result.battle.source}</em></span><button className="secondary-action top-reset" onClick={onReset}>再来一局 <Icon name="reset" size={18} /></button></div><div className="battle-verdict"><small>模型综合裁决</small><h1>{result.battle.title}</h1><p>{result.battle.reason}</p><div>{(result.battle.decisiveDimensions || []).map((item) => <span key={item}>{item}</span>)}</div></div><div className="pk-result-grid">{result.participants.map((participant, index) => <section key={`${participant.name}-${index}`} className={`pk-player-result ${index === 0 ? 'blue' : 'orange'} ${winnerIndex === index ? 'winner' : ''}`}><header><span>{index === 0 ? '选手 A' : '选手 B'}</span>{winnerIndex === index ? <strong>本场胜者</strong> : null}</header><h2>{participant.name}</h2><div className="pk-score"><AnimatedNumber value={participant.score} /><small>/100</small></div><h3>{participant.type}</h3><p>{participant.verdict}</p><div className="pk-dimensions">{DIMENSION_META.map(([key, label]) => <div key={key}><span>{label}</span><i><b style={{ width: `${participant.dimensions[key]}%` }} /></i><strong>{participant.dimensions[key]}</strong></div>)}</div></section>)}</div><div className="result-actions"><button className="primary-action" onClick={onPoster}>生成双人海报 <Icon name="download" size={24} /></button><button className="secondary-action" onClick={onReset}>再来一局 <Icon name="reset" size={20} /></button></div></section><section className="pk-commentary"><div><small>对战编号 / {result.id}</small><h2>豪气没有标准答案，<br />但对决必须有个说法。</h2></div><p>{result.battle.reason}<span>模型综合裁决仅供娱乐，不构成对任何人的事实判断。</span></p></section></main>;
+  return <main className="pk-result-page"><section className="pk-result-hero"><div className="result-heading"><span className="completion-mark">/// PK 裁决完成 <em>{result.battle.source}</em></span><button className="secondary-action top-reset" onClick={onReset}>再来一局 <Icon name="reset" size={18} /></button></div><ModelSourceNotice source={result.battle.source} fallbackNotice={result.battle.fallbackNotice} /><div className="battle-verdict"><small>模型综合裁决</small><h1>{result.battle.title}</h1><p>{result.battle.reason}</p><div>{(result.battle.decisiveDimensions || []).map((item) => <span key={item}>{item}</span>)}</div></div><div className="pk-result-grid">{result.participants.map((participant, index) => <section key={`${participant.name}-${index}`} className={`pk-player-result ${index === 0 ? 'blue' : 'orange'} ${winnerIndex === index ? 'winner' : ''}`}><header><span>{index === 0 ? '选手 A' : '选手 B'}</span>{winnerIndex === index ? <strong>本场胜者</strong> : null}</header><h2>{participant.name}</h2><div className="pk-score"><AnimatedNumber value={participant.score} /><small>/100</small></div><h3>{participant.type}</h3><p>{participant.verdict}</p><div className="pk-dimensions">{DIMENSION_META.map(([key, label]) => <div key={key}><span>{label}</span><i><b style={{ width: `${participant.dimensions[key]}%` }} /></i><strong>{participant.dimensions[key]}</strong></div>)}</div></section>)}</div><div className="result-actions"><button className="primary-action" onClick={onPoster}>生成双人海报 <Icon name="download" size={24} /></button><button className="secondary-action" onClick={onReset}>再来一局 <Icon name="reset" size={20} /></button></div></section><section className="pk-commentary"><div><small>对战编号 / {result.id}</small><h2>豪气没有标准答案，<br />但对决必须有个说法。</h2></div><p>{result.battle.reason}<span>模型综合裁决仅供娱乐，不构成对任何人的事实判断。</span></p></section></main>;
 }
 
 function Result({ result, onReset, onPoster }) {
@@ -636,7 +657,8 @@ function Result({ result, onReset, onPoster }) {
   return (
     <main className="result-page">
       <section className="result-hero">
-        <div className="result-heading"><span className="completion-mark">/// 鉴定完成 <em>{result.source || '本地备用算法'}</em></span><button className="secondary-action top-reset" onClick={onReset}>再测一次 <Icon name="reset" size={18} /></button></div>
+        <div className="result-heading"><span className="completion-mark">/// 鉴定完成 <em>{result.source || '豪之算法'}</em></span><button className="secondary-action top-reset" onClick={onReset}>再测一次 <Icon name="reset" size={18} /></button></div>
+        <ModelSourceNotice source={result.source} fallbackNotice={result.fallbackNotice} />
         <div className="result-grid">
           <div className="score-block"><small>嘉豪指数</small><div className="score"><AnimatedNumber value={result.score} /><em>/100</em></div><div className="approval-stamp">鉴定通过</div><small>嘉豪物种</small><h1>{result.type}</h1><div className="verdict"><span>鉴定结论</span><strong>{result.verdict}</strong></div><div className="trait-signals" aria-label="捕获到的嘉豪特征">{(result.traits || ['信号稳定', '豪气待复核']).map((trait) => <span key={trait}>{trait}</span>)}</div></div>
           <div className="dimension-block"><h2>六维豪气分析</h2><Radar dimensions={result.dimensions} />
