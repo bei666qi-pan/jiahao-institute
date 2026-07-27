@@ -26,7 +26,9 @@
 
 | 功能 | 说明 |
 | --- | --- |
-| 多模态鉴定 | 支持文字、照片与聊天记录三种输入方式。 |
+| 多模态鉴定 | 照片优先，支持授权自拍、相册、文字与聊天记录。 |
+| 聊天文件分析 | 支持图片、PDF、TXT 与 DOCX；单次最多 3 份、单份 10MB。 |
+| 双人豪气 PK | 双方可分别提交照片、聊天或文字，由模型完成综合娱乐裁决。 |
 | AI 趣味判词 | 由模型生成戏剧化分析过程、嘉豪指数与专属判词。 |
 | 六维豪气成分 | 用雷达图呈现你的豪气构成，一眼看懂人格配方。 |
 | 物种图鉴 | 解锁不同嘉豪物种与隐藏天赋。 |
@@ -133,7 +135,7 @@ npm start
 | Input | Environment variable |
 | --- | --- |
 | Text analysis | `DEEPSEEK_MODEL` |
-| Photo and chat-screenshot analysis | `ARK_MODEL` |
+| Photo, document-image, and mixed PK analysis | `ARK_MODEL` |
 
 Species images load from the existing Volcengine TOS + CDN path at `https://assets.versecraft.cn/jiahao` by default. Set `VITE_ASSET_BASE_URL` at build time to override it.
 

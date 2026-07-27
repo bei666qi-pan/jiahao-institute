@@ -41,6 +41,21 @@ const SYSTEM_PROMPT = `你是“嘉豪鉴定所”的娱乐鉴定官。你的任
   "comment": "一段50到100字的嘉豪式友善总评"
 }`;
 
+const PK_SYSTEM_PROMPT = `你是“嘉豪鉴定所”的双人豪气裁决官。你会收到两名选手可能不同类型的素材。请分别按照同一套六维标准完成娱乐分析，再基于表达、构图叙事、信息留白、镜头掌控与豪言风格做综合裁决。胜者不必机械等于总分更高者，但理由必须具体、友善、可解释；实力接近时可以判平局。
+
+安全规则：只分析素材呈现出的表达风格，不评价长相或身体，不推断身份、种族、疾病、性别、政治倾向等敏感属性，不侮辱任何人，不把结果描述成科学事实。
+
+嘉豪物种只能从以下列表选择：自在极意豪、美式嘉豪、深情破碎豪、计算机嘉豪、股票嘉豪、不懂装懂豪、小众优越豪、潜伏嘉豪、反向嘉豪、无意炫耀豪。
+
+只返回一个合法 JSON 对象，不要 Markdown，不要解释。严格结构：
+{
+  "participants": [
+    {"score":整数,"type":"物种","level":"等级","verdict":"20到45字","dimensions":{"mystery":整数,"flex":整数,"niche":整数,"deep":整数,"show":整数,"language":整数},"traits":["四项"],"evidence":["三项"],"comment":"50到100字"},
+    {"score":整数,"type":"物种","level":"等级","verdict":"20到45字","dimensions":{"mystery":整数,"flex":整数,"niche":整数,"deep":整数,"show":整数,"language":整数},"traits":["四项"],"evidence":["三项"],"comment":"50到100字"}
+  ],
+  "battle": {"winner":"A或B或tie","title":"12字以内","reason":"40到100字","decisiveDimensions":["一到三个中文维度名"]}
+}`;
+
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -83,7 +98,7 @@ function cleanText(value, fallback, max = 240) {
   return (text || fallback).slice(0, max);
 }
 
-function normalizeResult(raw) {
+export function normalizeResult(raw) {
   const score = clamp(raw.score);
   const dimensions = Object.fromEntries(DIMENSIONS.map((key) => [key, clamp(raw.dimensions?.[key])]));
   const inferredLevel = score >= 95 ? '自在极意豪' : score >= 80 ? '豪气冲天' : score >= 60 ? '高阶嘉豪' : score >= 40 ? '半步嘉豪' : score >= 20 ? '嘉豪观察对象' : '清澈普通人';
@@ -100,6 +115,26 @@ function normalizeResult(raw) {
   };
 }
 
+export function normalizePkResult(raw, names, source) {
+  const participants = [0, 1].map((index) => ({
+    name: names[index],
+    ...normalizeResult(raw.participants?.[index] || {}),
+    source,
+  }));
+  const allowedWinner = ['A', 'B', 'tie'];
+  return {
+    kind: 'pk',
+    participants,
+    battle: {
+      winner: allowedWinner.includes(raw.battle?.winner) ? raw.battle.winner : 'tie',
+      title: cleanText(raw.battle?.title, '豪气同频', 20),
+      reason: cleanText(raw.battle?.reason, '双方豪气各有路径，这场对决暂时难分高下。', 220),
+      decisiveDimensions: Array.isArray(raw.battle?.decisiveDimensions) ? raw.battle.decisiveDimensions.map((item) => cleanText(item, '', 12)).filter(Boolean).slice(0, 3) : [],
+      source,
+    },
+  };
+}
+
 function extractJson(text) {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -107,38 +142,65 @@ function extractJson(text) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function analyzeWithModel(payload) {
-  const isVision = payload.mode === 'photo' || payload.mode === 'chat';
-  const provider = isVision
+function getProvider(isVision) {
+  return isVision
     ? { base: VISION_API_BASE, model: VISION_MODEL, key: VISION_API_KEY, source: '云端多模态大模型' }
     : { base: TEXT_API_BASE, model: TEXT_MODEL, key: TEXT_API_KEY, source: '云端文字大模型' };
-  if (!provider.key) throw new Error(isVision ? '多模态大模型尚未配置' : '文字大模型尚未配置');
-  const modeLabel = payload.mode === 'photo' ? '照片鉴定' : payload.mode === 'chat' ? '聊天记录鉴定' : '文字鉴定';
-  const userText = cleanText(payload.input, payload.mode === 'text' ? '用户未提供有效文字' : '请结合图片内容进行鉴定', 1200);
-  const content = [{ type: 'text', text: `鉴定方式：${modeLabel}\n用户内容：${userText}\n请严格按要求生成娱乐鉴定 JSON。` }];
-  for (const image of Array.isArray(payload.images) ? payload.images.slice(0, 3) : []) {
-    if (typeof image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(image)) {
-      content.push({ type: 'image_url', image_url: { url: image } });
-    }
-  }
+}
 
+export function validImages(value, maximum = 9) {
+  return (Array.isArray(value) ? value : []).filter((image) => typeof image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(image)).slice(0, maximum);
+}
+
+async function requestModel(provider, systemPrompt, content) {
+  if (!provider.key) throw new Error(provider.model === VISION_MODEL ? '多模态大模型尚未配置' : '文字大模型尚未配置');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 42000);
   try {
     const response = await fetch(`${provider.base}/chat/completions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${provider.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: provider.model, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content }], temperature: 0.85, response_format: { type: 'json_object' } }),
+      body: JSON.stringify({ model: provider.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content }], temperature: 0.85, response_format: { type: 'json_object' } }),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`大模型请求失败（${response.status}）`);
     const data = await response.json();
     const contentText = data.choices?.[0]?.message?.content;
     if (typeof contentText !== 'string') throw new Error('大模型返回内容为空');
-    return { ...normalizeResult(extractJson(contentText)), source: provider.source };
-  } finally {
-    clearTimeout(timeout);
-  }
+    return extractJson(contentText);
+  } finally { clearTimeout(timeout); }
+}
+
+async function analyzeWithModel(payload) {
+  const isVision = payload.mode === 'photo' || payload.mode === 'chat';
+  const provider = getProvider(isVision);
+  const modeLabel = payload.mode === 'photo' ? '照片鉴定' : payload.mode === 'chat' ? '聊天记录鉴定' : '文字鉴定';
+  const userText = cleanText(payload.input, payload.mode === 'text' ? '用户未提供有效文字' : '请结合图片内容进行鉴定', 1200);
+  const extractedText = cleanText(payload.extractedText, '', 20_000);
+  const content = [{ type: 'text', text: `鉴定方式：${modeLabel}\n用户内容：${userText}\n文件提取内容：${extractedText || '无'}\n请严格按要求生成娱乐鉴定 JSON。` }];
+  for (const image of validImages(payload.images)) content.push({ type: 'image_url', image_url: { url: image } });
+  return { ...normalizeResult(await requestModel(provider, SYSTEM_PROMPT, content)), source: provider.source };
+}
+
+async function analyzePkWithModel(payload) {
+  if (!Array.isArray(payload.participants) || payload.participants.length !== 2) throw new Error('PK 必须提交两名选手');
+  const participants = payload.participants.map((participant, index) => ({
+    name: cleanText(participant.name, `选手 ${index === 0 ? 'A' : 'B'}`, 20),
+    mode: ['photo', 'chat', 'text'].includes(participant.mode) ? participant.mode : 'text',
+    input: cleanText(participant.input, '', 1200),
+    extractedText: cleanText(participant.extractedText, '', 20_000),
+    images: validImages(participant.images),
+  }));
+  const isVision = participants.some((participant) => participant.images.length > 0);
+  const provider = getProvider(isVision);
+  const content = [];
+  participants.forEach((participant, index) => {
+    content.push({ type: 'text', text: `\n选手 ${index === 0 ? 'A' : 'B'}\n名称：${participant.name}\n输入类型：${participant.mode}\n文字：${participant.input || '无'}\n文件提取内容：${participant.extractedText || '无'}\n以下图片均属于该选手：` });
+    participant.images.forEach((image) => content.push({ type: 'image_url', image_url: { url: image } }));
+  });
+  content.push({ type: 'text', text: '请严格按要求分别分析并完成综合裁决。' });
+  const raw = await requestModel(provider, PK_SYSTEM_PROMPT, content);
+  return normalizePkResult(raw, participants.map((participant) => participant.name), provider.source === '云端多模态大模型' ? '模型综合裁决 · 多模态' : '模型综合裁决 · 文字');
 }
 
 async function serveStatic(req, res) {
@@ -178,6 +240,11 @@ const server = createServer(async (req, res) => {
       const result = await analyzeWithModel(payload);
       return sendJson(res, 200, result);
     }
+    if (req.method === 'POST' && req.url === '/api/pk') {
+      const payload = await readJson(req);
+      const result = await analyzePkWithModel(payload);
+      return sendJson(res, 200, result);
+    }
     if (req.method === 'GET' || req.method === 'HEAD') return await serveStatic(req, res);
     return sendJson(res, 405, { error: '不支持的请求方式' });
   } catch (error) {
@@ -186,6 +253,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '::', () => {
-  console.log(`嘉豪鉴定服务已启动：${PORT}`);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  server.listen(PORT, '::', () => {
+    console.log(`嘉豪鉴定服务已启动：${PORT}`);
+  });
+}

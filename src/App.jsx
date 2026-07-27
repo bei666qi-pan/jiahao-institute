@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { imageFileToDataUrl, prepareFiles, validateFiles } from './fileProcessing';
+import { decideFallbackWinner } from './validation';
 
 const SITE_URL = 'https://jiahao.versecraft.cn';
 const ASSET_BASE_URL = (import.meta.env.VITE_ASSET_BASE_URL || 'https://assets.versecraft.cn/jiahao').replace(/\/$/, '');
 
 const MODES = [
-  { id: 'text', label: '文字鉴定', hint: '输入朋友圈文案、签名或你想说的一句话' },
   { id: 'photo', label: '照片鉴定', hint: '上传一张最有感觉的照片' },
-  { id: 'chat', label: '聊天记录', hint: '上传 1–3 张聊天截图，记得先隐藏隐私' },
+  { id: 'chat', label: '聊天记录', hint: '上传图片、PDF、TXT 或 DOCX，记得先隐藏隐私' },
+  { id: 'text', label: '文字鉴定', hint: '输入朋友圈文案、签名或你想说的一句话' },
+  { id: 'pk', label: '双人PK', hint: '双方选择各自的豪气样本' },
 ];
 
 const SPECIES = [
@@ -59,6 +62,11 @@ function Icon({ name, size = 20 }) {
     share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></>,
     check: <path d="m5 12 4 4L19 6"/>,
     history: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></>,
+    camera: <><path d="M8 5 9.5 3h5L16 5h3a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z"/><circle cx="12" cy="13" r="4"/></>,
+    file: <><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6M9 17h6"/></>,
+    sword: <><path d="m14 4 6 6-9 9-6 1 1-6z"/><path d="m13 5 6 6M4 4l16 16"/></>,
+    lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
+    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14"/></>,
   };
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -154,25 +162,13 @@ function analyze(input, mode, files) {
   };
 }
 
-async function fileToModelImage(file) {
-  const bitmap = await createImageBitmap(file);
-  const maxEdge = 1280;
-  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const context = canvas.getContext('2d');
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL('image/jpeg', 0.78);
-}
-
-async function analyzeWithCloud(input, mode, files) {
-  const images = mode === 'text' ? [] : await Promise.all(files.map(fileToModelImage));
+async function analyzeWithCloud(input, mode, files, prepared) {
+  const content = prepared || (mode === 'text' ? { images: [], extractedText: '' } : await prepareFiles(files));
+  const images = content.images;
   const response = await fetch('/api/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input: input.trim(), mode, images }),
+    body: JSON.stringify({ input: input.trim(), mode, images, extractedText: content.extractedText || '' }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -193,6 +189,47 @@ async function analyzeWithCloud(input, mode, files) {
     source: payload.source || '云端大模型',
     createdAt: Date.now(),
     mode,
+  };
+}
+
+function makeFallbackPk(participants) {
+  const results = participants.map((participant) => ({
+    name: participant.name,
+    ...analyze(participant.input || participant.extractedText || '', participant.mode, participant.files || []),
+  }));
+  const winner = decideFallbackWinner(results[0].score, results[1].score);
+  const winningName = winner === 'tie' ? '双方' : results[winner === 'A' ? 0 : 1].name;
+  return {
+    kind: 'pk',
+    participants: results,
+    battle: {
+      winner,
+      title: winner === 'tie' ? '豪气同频' : `${winningName} 胜出`,
+      reason: winner === 'tie' ? '双方豪气强度几乎一致，这场对决暂时难分高下。' : `${winningName} 的综合豪气信号更稳定，在六维扫描中占据上风。`,
+      decisiveDimensions: results[0].top.slice(0, 2).map((item) => item.label),
+      source: '本地备用裁决',
+    },
+    id: `嘉豪-PK-${String(hashString(results.map((item) => item.id).join(':'))).slice(0, 8)}`,
+    createdAt: Date.now(),
+  };
+}
+
+async function analyzePkWithCloud(participants) {
+  const response = await fetch('/api/pk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ participants: participants.map(({ name, mode, input, extractedText, images }) => ({ name, mode, input, extractedText, images })) }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || '云端 PK 裁决暂时不可用');
+  }
+  const payload = await response.json();
+  return {
+    ...payload,
+    kind: 'pk',
+    id: payload.id || `嘉豪-PK-${String(hashString(JSON.stringify(payload))).slice(0, 8)}`,
+    createdAt: Date.now(),
   };
 }
 
@@ -335,6 +372,38 @@ async function makePoster(result) {
   return canvas.toDataURL('image/png');
 }
 
+async function makePkPoster(result) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1440;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#070b12'; ctx.fillRect(0, 0, 1080, 1440);
+  ctx.strokeStyle = '#2f7bff'; ctx.lineWidth = 16; ctx.strokeRect(24, 24, 1032, 1392);
+  ctx.fillStyle = '#eaf2ff'; ctx.font = '900 62px Arial, sans-serif'; ctx.fillText('嘉豪鉴定所', 70, 118);
+  ctx.font = '600 22px monospace'; ctx.fillText(`双人 PK / ${result.id}`, 70, 160);
+  const colors = ['#2f7bff', '#ff7657'];
+  result.participants.forEach((participant, index) => {
+    const x = index === 0 ? 70 : 570;
+    ctx.strokeStyle = colors[index]; ctx.lineWidth = 3; ctx.strokeRect(x, 240, 440, 650);
+    ctx.fillStyle = colors[index]; ctx.font = '800 28px Arial, sans-serif'; ctx.fillText(index === 0 ? '选手 A' : '选手 B', x + 30, 292);
+    ctx.fillStyle = '#eaf2ff'; ctx.font = '900 48px Arial, sans-serif'; drawWrappedText(ctx, participant.name, x + 30, 360, 380, 54, 1);
+    ctx.fillStyle = colors[index]; ctx.font = '900 190px Arial, sans-serif'; ctx.fillText(String(participant.score).padStart(2, '0'), x + 24, 570);
+    ctx.fillStyle = '#eaf2ff'; ctx.font = '800 40px Arial, sans-serif'; drawWrappedText(ctx, participant.type, x + 30, 650, 380, 46, 2);
+    DIMENSION_META.forEach(([key, label], dimensionIndex) => {
+      const y = 740 + dimensionIndex * 22;
+      ctx.fillStyle = '#eaf2ff'; ctx.font = '600 15px Arial, sans-serif'; ctx.fillText(label, x + 30, y);
+      ctx.fillStyle = colors[index]; ctx.fillRect(x + 125, y - 11, participant.dimensions[key] * 2.45, 10);
+    });
+  });
+  ctx.fillStyle = '#73d7ff'; ctx.font = '900 66px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(result.battle.title, 540, 1010);
+  ctx.textAlign = 'left'; ctx.fillStyle = '#eaf2ff'; ctx.font = '700 28px Arial, sans-serif'; drawWrappedText(ctx, result.battle.reason, 170, 1080, 740, 42, 3);
+  const qr = await QRCode.toDataURL(SITE_URL, { margin: 0, width: 150, color: { dark: '#eaf2ff', light: '#070b12' } });
+  const qrImg = new Image(); qrImg.src = qr; await new Promise((resolve) => { qrImg.onload = resolve; });
+  ctx.drawImage(qrImg, 840, 1210, 150, 150);
+  ctx.fillStyle = '#eaf2ff'; ctx.font = '600 20px monospace'; ctx.fillText('模型综合裁决 · 仅供娱乐', 70, 1320); ctx.fillText('海报不包含原始素材', 70, 1360);
+  return canvas.toDataURL('image/png');
+}
+
 function Header({ onHistory }) {
   return (
     <header className="site-header">
@@ -348,83 +417,164 @@ function Header({ onHistory }) {
   );
 }
 
-function AssayForm({ onResult, addHistory }) {
-  const [mode, setMode] = useState('text');
-  const [input, setInput] = useState(EXAMPLES[0]);
-  const [files, setFiles] = useState([]);
+function CameraModal({ onClose, onCapture }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [error, setError] = useState('');
+  const [captured, setCaptured] = useState(null);
+  useEffect(() => {
+    let active = true;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('当前浏览器无法访问摄像头，请关闭此窗口并从相册上传。');
+      return undefined;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+      .then((stream) => {
+        if (!active) return stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch(() => setError('摄像头授权未成功。你仍可以关闭此窗口并从相册上传。'));
+    return () => {
+      active = false;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+  const takePhoto = () => {
+    const video = videoRef.current;
+    if (!video?.videoWidth) return setError('摄像头画面尚未准备好，请稍等片刻。');
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext('2d');
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setCaptured(canvas.toDataURL('image/jpeg', 0.82));
+  };
+  const confirm = async () => {
+    const blob = await (await fetch(captured)).blob();
+    onCapture(new File([blob], `自拍-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    onClose();
+  };
+  return <Modal title="授权摄像头自拍" onClose={onClose} wide><div className="camera-body"><div className="camera-stage">{captured ? <img src={captured} alt="自拍预览" /> : <video ref={videoRef} autoPlay muted playsInline aria-label="摄像头实时预览" /> }<span className="camera-reticle" aria-hidden="true" /></div><div className="camera-controls"><p><Icon name="lock" size={17} /> 摄像头只在此窗口内工作，关闭后立即停止。</p>{error ? <p className="form-error" role="alert">{error}</p> : null}{captured ? <><button className="primary-action" onClick={confirm}>使用这张照片 <Icon name="check" /></button><button className="secondary-action" onClick={() => setCaptured(null)}>重新拍摄 <Icon name="reset" /></button></> : <button className="primary-action" onClick={takePhoto} disabled={Boolean(error)}>拍下这一刻 <Icon name="camera" /></button>}</div></div></Modal>;
+}
+
+function FileSummary({ files, onClear }) {
+  if (!files.length) return null;
+  return <div className="file-summary" aria-live="polite"><span><strong>已捕获 {files.length} 份素材</strong>{files.map((file) => file.name).join(' / ')}</span><button onClick={onClear} aria-label="清空已选择文件"><Icon name="trash" size={18} /></button></div>;
+}
+
+function ParticipantComposer({ label, accent, value, onChange, onOpenCamera }) {
+  const fileRef = useRef(null);
+  const updateFiles = (list) => {
+    try { onChange({ ...value, files: validateFiles(list, { mode: value.mode }), error: '' }); }
+    catch (error) { onChange({ ...value, files: [], error: error.message }); }
+  };
+  return <section className={`participant-card ${accent}`} aria-label={`${label}输入`}><header><strong>{label}</strong><input aria-label={`${label}名称`} maxLength={12} value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} /></header><div className="participant-types" role="tablist" aria-label={`${label}素材类型`}>{['photo', 'chat', 'text'].map((mode) => <button key={mode} role="tab" aria-selected={value.mode === mode} className={value.mode === mode ? 'active' : ''} onClick={() => onChange({ ...value, mode, files: [], input: '', error: '' })}>{mode === 'photo' ? '照片' : mode === 'chat' ? '聊天' : '文字'}</button>)}</div>{value.mode === 'text' ? <textarea className="participant-text" maxLength={500} placeholder="输入一句最有豪气的话" value={value.input} onChange={(event) => onChange({ ...value, input: event.target.value })} /> : value.mode === 'photo' ? <div className="participant-photo"><Icon name="camera" size={42} /><span>{value.files[0]?.name || '正脸入框，光线充足'}</span><div><button onClick={onOpenCamera}><Icon name="camera" size={17} />自拍</button><button onClick={() => fileRef.current?.click()}><Icon name="image" size={17} />上传照片</button></div></div> : <button className="participant-upload" onClick={() => fileRef.current?.click()}><Icon name="file" size={34} /><strong>{value.files.length ? `已选择 ${value.files.length} 份` : '上传聊天记录'}</strong><span>图片 / PDF / TXT / DOCX</span></button>}<input ref={fileRef} hidden type="file" multiple={value.mode === 'chat'} accept={value.mode === 'photo' ? 'image/jpeg,image/png,image/webp' : 'image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx'} onChange={(event) => updateFiles(event.target.files)} />{value.error ? <p className="participant-error" role="alert">{value.error}</p> : null}</section>;
+}
+
+function PkForm({ onResult, addHistory }) {
+  const [participants, setParticipants] = useState([
+    { name: '选手 A', mode: 'photo', input: '', files: [], error: '' },
+    { name: '选手 B', mode: 'text', input: '', files: [], error: '' },
+  ]);
+  const [cameraFor, setCameraFor] = useState(null);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const update = (index, value) => setParticipants((current) => current.map((item, itemIndex) => itemIndex === index ? value : item));
+  const start = async () => {
+    if (!consent) return setError('请确认双方素材的合法授权与娱乐分析说明。');
+    for (const participant of participants) {
+      if (!participant.name.trim()) return setError('请为双方填写名称。');
+      if (participant.mode === 'text' && participant.input.trim().length < 5) return setError(`${participant.name} 至少需要输入 5 个字。`);
+      if (participant.mode !== 'text' && !participant.files.length) return setError(`${participant.name} 还没有提交豪气样本。`);
+    }
+    setError(''); setAnalyzing(true);
+    try {
+      const prepared = await Promise.all(participants.map(async (participant) => ({ ...participant, ...(participant.mode === 'text' ? { images: [], extractedText: '' } : await prepareFiles(participant.files)) })));
+      let result;
+      try { result = await analyzePkWithCloud(prepared); }
+      catch { result = makeFallbackPk(prepared); }
+      addHistory(result); onResult(result); window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (reason) { setError(reason.message || '素材处理失败，请检查文件后重试。'); }
+    finally { setAnalyzing(false); }
+  };
+  return <div className="pk-form"><div className="pk-contestants"><ParticipantComposer label="选手 A" accent="blue" value={participants[0]} onChange={(value) => update(0, value)} onOpenCamera={() => setCameraFor(0)} /><span className="versus" aria-hidden="true">VS</span><ParticipantComposer label="选手 B" accent="orange" value={participants[1]} onChange={(value) => update(1, value)} onOpenCamera={() => setCameraFor(1)} /></div><label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我确认拥有双方素材的合法授权，并同意用于本次娱乐分析；本站不保存原始内容。</label>{error ? <p className="form-error" role="alert">PK 中止 / {error}</p> : null}<button className="primary-action" onClick={start} disabled={analyzing}>{analyzing ? '双方豪气汇聚中……' : <>开始豪气 PK <Icon name="sword" size={24} /></>}</button>{cameraFor !== null ? <CameraModal onClose={() => setCameraFor(null)} onCapture={(file) => update(cameraFor, { ...participants[cameraFor], files: [file], error: '' })} /> : null}</div>;
+}
+
+function AssayForm({ onResult, addHistory, mode, onModeChange }) {
+  const [input, setInput] = useState(EXAMPLES[0]);
+  const [files, setFiles] = useState([]);
+  const [consent, setConsent] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [error, setError] = useState('');
+  const [notes, setNotes] = useState([]);
+  const [analyzing, setAnalyzing] = useState(false);
   const [step, setStep] = useState(0);
   const fileRef = useRef(null);
-
-  const selectMode = (next) => { setMode(next); setError(''); setFiles([]); };
+  const selectMode = (next) => { onModeChange(next); setError(''); setFiles([]); setNotes([]); };
   const onFiles = (list) => {
-    const accepted = [...list].filter((file) => /image\/(jpeg|png|webp)/.test(file.type) && file.size <= 10 * 1024 * 1024);
-    const limit = mode === 'chat' ? 3 : 1;
-    if (!accepted.length) setError('请上传十兆以内的常见图片格式。');
-    else { setFiles(accepted.slice(0, limit)); setError(''); }
+    try { setFiles(validateFiles(list, { mode })); setError(''); }
+    catch (reason) { setFiles([]); setError(reason.message); }
   };
-
   const start = async () => {
     if (!consent) return setError('请先确认内容使用权限与娱乐分析说明。');
     if (mode === 'text' && input.trim().length < 5) return setError('至少输入 5 个字，豪气才有迹可循。');
-    if (mode !== 'text' && files.length === 0) return setError('先上传素材，鉴定仪还不能隔空捕捉豪气。');
-    setError('');
-    setAnalyzing(true);
-    setStep(0);
+    if (mode !== 'text' && files.length === 0) return setError('先提交素材，鉴定仪还不能隔空捕捉豪气。');
+    setError(''); setAnalyzing(true); setStep(0);
     const timer = window.setInterval(() => setStep((value) => Math.min(value + 1, ANALYSIS_STEPS.length - 1)), 520);
     const startedAt = Date.now();
     let result;
     try {
-      result = await analyzeWithCloud(input, mode, files);
-    } catch {
-      result = analyze(input, mode, files);
-    }
-    const remainingDelay = Math.max(0, 2600 - (Date.now() - startedAt));
-    window.setTimeout(() => {
-      window.clearInterval(timer);
-      addHistory(result);
-      setAnalyzing(false);
-      onResult(result);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, remainingDelay);
+      const prepared = mode === 'text' ? null : await prepareFiles(files);
+      setNotes(prepared?.notes || []);
+      try { result = await analyzeWithCloud(input, mode, files, prepared); }
+      catch { result = analyze(mode === 'chat' ? prepared.extractedText : input, mode, files); }
+    } catch (reason) { window.clearInterval(timer); setAnalyzing(false); return setError(reason.message || '素材解析失败，请检查文件后重试。'); }
+    const remainingDelay = Math.max(0, 2200 - (Date.now() - startedAt));
+    window.setTimeout(() => { window.clearInterval(timer); addHistory(result); setAnalyzing(false); onResult(result); window.scrollTo({ top: 0, behavior: 'smooth' }); }, remainingDelay);
   };
-
   return (
-    <div className="assay-frame" id="assay">
+    <div className={`assay-frame ${mode === 'pk' ? 'pk-assay' : ''}`} id="assay">
       <div className="mode-tabs" role="tablist" aria-label="鉴定方式">
-        {MODES.map((item) => (
-          <button key={item.id} role="tab" aria-selected={mode === item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item.id)}>
-            <Icon name={item.id === 'text' ? 'text' : item.id === 'photo' ? 'image' : 'chat'} size={19} />{item.label}
-          </button>
-        ))}
+        {MODES.map((item) => <button key={item.id} role="tab" aria-selected={mode === item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item.id)}><Icon name={item.id === 'text' ? 'text' : item.id === 'photo' ? 'image' : item.id === 'chat' ? 'chat' : 'sword'} size={19} />{item.label}</button>)}
       </div>
-      <div className="input-area">
-        {mode === 'text' ? (
-          <>
-            <label htmlFor="jiahao-text">输入一句最有感觉的话</label>
-            <textarea id="jiahao-text" maxLength={500} value={input} onChange={(event) => setInput(event.target.value)} />
-            <span className="counter">{input.length} / 500</span>
-            <div className="example-row" aria-label="换一个示例">
-              <span>试试：</span>
-              {EXAMPLES.slice(1).map((example, index) => <button key={example} onClick={() => setInput(example)}>0{index + 1}</button>)}
-            </div>
-          </>
-        ) : (
-          <button className="drop-zone" onClick={() => fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onFiles(event.dataTransfer.files); }}>
-            <Icon name="upload" size={30} />
-            <strong>{files.length ? `已捕获 ${files.length} 份豪气素材` : MODES.find((item) => item.id === mode).hint}</strong>
-            <span>{files.length ? files.map((file) => file.name).join(' / ') : '点击选择或拖到这里 · 常见图片格式 · 十兆以内'}</span>
-          </button>
-        )}
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={mode === 'chat'} hidden onChange={(event) => onFiles(event.target.files)} />
-      </div>
-      <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我同意将内容发送至云端大模型做娱乐分析；本站不保存内容。</label>
-      {error && <p className="form-error" role="alert">鉴定中止 / {error}</p>}
-      <button className="primary-action" onClick={start} disabled={analyzing}>{analyzing ? ANALYSIS_STEPS[step] : <>开始鉴定 <Icon name="arrow" size={26} /></>}</button>
-      {analyzing && <span className="sr-only" role="status" aria-live="polite">{ANALYSIS_STEPS[step]}</span>}
-      {analyzing && <div className="analysis-progress" aria-hidden="true"><span style={{ width: `${(step + 1) * 20}%` }} /></div>}
+      {mode === 'pk' ? <PkForm onResult={onResult} addHistory={addHistory} /> : (
+        <>
+          <div className={`input-area ${mode === 'photo' ? 'photo-input' : ''}`}>
+            {mode === 'text' ? (
+              <>
+                <label htmlFor="jiahao-text">输入一句最有感觉的话</label>
+                <textarea id="jiahao-text" maxLength={500} value={input} onChange={(event) => setInput(event.target.value)} />
+                <span className="counter">{input.length} / 500</span>
+                <div className="example-row" aria-label="换一个示例"><span>试试：</span>{EXAMPLES.slice(1).map((example, index) => <button key={example} onClick={() => setInput(example)}>0{index + 1}</button>)}</div>
+              </>
+            ) : mode === 'photo' ? (
+              <div className="photo-capture">
+                <div className="photo-capture-intro"><Icon name="camera" size={42} /><strong>自拍或上传一张照片</strong><span>{files[0]?.name || '正脸入框、光线充足，能捕获更完整的豪气信号'}</span></div>
+                <div className="photo-capture-actions">
+                  <button className="photo-native-source" onClick={() => fileRef.current?.click()}><Icon name="image" size={20} /><span><strong>拍照或从相册选择</strong><small>手机将打开系统图片来源菜单</small></span></button>
+                  <button className="desktop-camera-action" onClick={() => setCameraOpen(true)}><Icon name="camera" size={19} /><span><strong>使用电脑摄像头</strong><small>仅桌面端</small></span></button>
+                </div>
+              </div>
+            ) : (
+              <button className="drop-zone" onClick={() => fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onFiles(event.dataTransfer.files); }}><Icon name="file" size={34} /><strong>{files.length ? `已捕获 ${files.length} 份聊天素材` : MODES.find((item) => item.id === mode).hint}</strong><span>点击选择或拖到这里 · 最多 3 份 · 单份 10MB 内</span></button>
+            )}
+            <input ref={fileRef} type="file" accept={mode === 'photo' ? 'image/*' : 'image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx'} multiple={mode === 'chat'} hidden onChange={(event) => onFiles(event.target.files)} />
+          </div>
+          <FileSummary files={files} onClear={() => setFiles([])} />
+          <p className="privacy-note"><Icon name="lock" size={15} /> 摄像头只在授权后访问；聊天记录支持图片 / PDF / TXT / DOCX；内容不会持久化保存。</p>
+          <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我同意将内容发送至云端大模型做娱乐分析；本站不保存内容。</label>
+          {notes.length ? <p className="processing-note">{notes.join('；')}</p> : null}
+          {error ? <p className="form-error" role="alert">鉴定中止 / {error}</p> : null}
+          <button className="primary-action" onClick={start} disabled={analyzing}>{analyzing ? ANALYSIS_STEPS[step] : <>开始鉴定 <Icon name="arrow" size={26} /></>}</button>
+          {analyzing ? <><span className="sr-only" role="status" aria-live="polite">{ANALYSIS_STEPS[step]}</span><div className="analysis-progress" aria-hidden="true"><span style={{ width: `${(step + 1) * 20}%` }} /></div></> : null}
+          {cameraOpen ? <CameraModal onClose={() => setCameraOpen(false)} onCapture={(file) => { setFiles([file]); setError(''); }} /> : null}
+        </>
+      )}
     </div>
   );
 }
@@ -434,16 +584,17 @@ function Scale() {
 }
 
 function Home({ onResult, addHistory }) {
+  const [mode, setMode] = useState('photo');
   return (
     <main>
-      <section className="hero">
+      <section className={`hero ${mode === 'pk' ? 'hero-pk' : ''}`}>
         <div className="hero-copy">
-          <div className="scan-marker" aria-hidden="true">豪气目标 // 已锁定</div>
-          <h1>你身上，<br />到底有多少豪气？</h1>
-          <p>输入一句话，鉴定你的嘉豪浓度、物种与隐藏天赋。</p>
+          <div className="scan-marker" aria-hidden="true">{mode === 'pk' ? '豪气目标 // 双人PK' : '豪气目标 // 已锁定'}</div>
+          <h1>{mode === 'pk' ? <>双人对决，<br />谁更豪气？</> : <>你身上，<br />到底有多少豪气？</>}</h1>
+          <p>{mode === 'pk' ? '双方可分别提交照片、聊天或文字，让模型综合裁决豪气高下。' : '自拍或上传一张照片，鉴定你的嘉豪浓度、物种与隐藏天赋。'}</p>
         </div>
-        <div className="hero-scan" style={{ '--hero-image': `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} aria-hidden="true"><span>豪气波形<br />锁定中……</span><i /></div>
-        <AssayForm onResult={onResult} addHistory={addHistory} />
+        {mode === 'pk' ? <div className="hero-scan pk-preview" aria-hidden="true"><div className="pk-preview-head">对比结果预览</div><div className="pk-preview-portraits"><div><strong>选手 A</strong><span style={{ backgroundImage: `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} /></div><ul>{DIMENSION_META.map(([, label]) => <li key={label}>{label}</li>)}</ul><div><strong>选手 B</strong><span style={{ backgroundImage: `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} /></div></div><p>等待双方豪气样本</p></div> : <div className="hero-scan" style={{ '--hero-image': `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} aria-hidden="true"><span>豪气波形<br />锁定中……</span><i /></div>}
+        <AssayForm onResult={onResult} addHistory={addHistory} mode={mode} onModeChange={setMode} />
         <Scale />
         <div className="document-meta"><span>娱乐档案<br /><b>仅供鉴定娱乐使用</b></span><span className="barcode" /><span>嘉豪鉴定样本<br /><b>请勿过度当真</b></span></div>
       </section>
@@ -475,6 +626,11 @@ function SpeciesGallery({ selected }) {
   );
 }
 
+function PkResult({ result, onReset, onPoster }) {
+  const winnerIndex = result.battle.winner === 'A' ? 0 : result.battle.winner === 'B' ? 1 : -1;
+  return <main className="pk-result-page"><section className="pk-result-hero"><div className="result-heading"><span className="completion-mark">/// PK 裁决完成 <em>{result.battle.source}</em></span><button className="secondary-action top-reset" onClick={onReset}>再来一局 <Icon name="reset" size={18} /></button></div><div className="battle-verdict"><small>模型综合裁决</small><h1>{result.battle.title}</h1><p>{result.battle.reason}</p><div>{(result.battle.decisiveDimensions || []).map((item) => <span key={item}>{item}</span>)}</div></div><div className="pk-result-grid">{result.participants.map((participant, index) => <section key={`${participant.name}-${index}`} className={`pk-player-result ${index === 0 ? 'blue' : 'orange'} ${winnerIndex === index ? 'winner' : ''}`}><header><span>{index === 0 ? '选手 A' : '选手 B'}</span>{winnerIndex === index ? <strong>本场胜者</strong> : null}</header><h2>{participant.name}</h2><div className="pk-score"><AnimatedNumber value={participant.score} /><small>/100</small></div><h3>{participant.type}</h3><p>{participant.verdict}</p><div className="pk-dimensions">{DIMENSION_META.map(([key, label]) => <div key={key}><span>{label}</span><i><b style={{ width: `${participant.dimensions[key]}%` }} /></i><strong>{participant.dimensions[key]}</strong></div>)}</div></section>)}</div><div className="result-actions"><button className="primary-action" onClick={onPoster}>生成双人海报 <Icon name="download" size={24} /></button><button className="secondary-action" onClick={onReset}>再来一局 <Icon name="reset" size={20} /></button></div></section><section className="pk-commentary"><div><small>对战编号 / {result.id}</small><h2>豪气没有标准答案，<br />但对决必须有个说法。</h2></div><p>{result.battle.reason}<span>模型综合裁决仅供娱乐，不构成对任何人的事实判断。</span></p></section></main>;
+}
+
 function Result({ result, onReset, onPoster }) {
   const speciesIndex = Math.max(0, SPECIES.findIndex((item) => item.name === result.type));
   return (
@@ -502,31 +658,46 @@ function Result({ result, onReset, onPoster }) {
 }
 
 function Modal({ title, onClose, children, wide = false }) {
+  const dialogRef = useRef(null);
+  const closeRef = useRef(null);
   useEffect(() => {
-    const close = (event) => event.key === 'Escape' && onClose();
-    document.addEventListener('keydown', close);
+    const previousFocus = document.activeElement;
+    const handleKey = (event) => {
+      if (event.key === 'Escape') return onClose();
+      if (event.key !== 'Tab') return undefined;
+      const focusable = [...(dialogRef.current?.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])') || [])].filter((element) => !element.hidden && element.offsetParent !== null);
+      if (!focusable.length) return undefined;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      return undefined;
+    };
+    closeRef.current?.focus();
+    document.addEventListener('keydown', handleKey);
     document.body.classList.add('modal-open');
-    return () => { document.removeEventListener('keydown', close); document.body.classList.remove('modal-open'); };
+    return () => { document.removeEventListener('keydown', handleKey); document.body.classList.remove('modal-open'); previousFocus?.focus?.(); };
   }, [onClose]);
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}><header><h2>{title}</h2><button onClick={onClose} aria-label="关闭"><Icon name="close" /></button></header>{children}</section></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section ref={dialogRef} className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}><header><h2>{title}</h2><button ref={closeRef} onClick={onClose} aria-label="关闭"><Icon name="close" /></button></header>{children}</section></div>;
 }
 
 function PosterModal({ result, onClose }) {
   const [dataUrl, setDataUrl] = useState('');
-  useEffect(() => { let active = true; makePoster(result).then((url) => active && setDataUrl(url)); return () => { active = false; }; }, [result]);
-  const download = () => { const link = document.createElement('a'); link.download = `嘉豪鉴定-${result.score}-${result.type}.png`; link.href = dataUrl; link.click(); };
+  useEffect(() => { let active = true; (result.kind === 'pk' ? makePkPoster(result) : makePoster(result)).then((url) => active && setDataUrl(url)); return () => { active = false; }; }, [result]);
+  const download = () => { const link = document.createElement('a'); link.download = result.kind === 'pk' ? `嘉豪PK-${result.battle.title}.png` : `嘉豪鉴定-${result.score}-${result.type}.png`; link.href = dataUrl; link.click(); };
   const share = async () => {
     if (!dataUrl) return;
     const blob = await (await fetch(dataUrl)).blob();
-    const file = new File([blob], `嘉豪鉴定-${result.score}.png`, { type: 'image/png' });
-    if (navigator.canShare?.({ files: [file] })) await navigator.share({ title: '我的嘉豪鉴定', text: `我的嘉豪指数是 ${result.score}，物种：${result.type}`, files: [file] });
+    const file = new File([blob], result.kind === 'pk' ? '嘉豪双人PK.png' : `嘉豪鉴定-${result.score}.png`, { type: 'image/png' });
+    const text = result.kind === 'pk' ? `双人豪气 PK 结果：${result.battle.title}` : `我的嘉豪指数是 ${result.score}，物种：${result.type}`;
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ title: result.kind === 'pk' ? '双人豪气 PK' : '我的嘉豪鉴定', text, files: [file] });
     else download();
   };
-  return <Modal title="分享你的鉴定海报" onClose={onClose} wide><div className="poster-modal-body">{dataUrl ? <img src={dataUrl} alt={`嘉豪指数 ${result.score}，${result.type}鉴定海报`} /> : <div className="poster-loading">豪气印刷中……</div>}<div className="poster-controls"><p>海报尺寸 1080 × 1440。图片只在你的浏览器本地生成，不会上传。</p><button className="primary-action" disabled={!dataUrl} onClick={download}>下载海报 <Icon name="download" /></button><button className="secondary-action" disabled={!dataUrl} onClick={share}>分享给朋友 <Icon name="share" /></button></div></div></Modal>;
+  return <Modal title={result.kind === 'pk' ? '分享双人 PK 海报' : '分享你的鉴定海报'} onClose={onClose} wide><div className="poster-modal-body">{dataUrl ? <img src={dataUrl} alt={result.kind === 'pk' ? `双人豪气 PK：${result.battle.title}` : `嘉豪指数 ${result.score}，${result.type}鉴定海报`} /> : <div className="poster-loading">豪气印刷中……</div>}<div className="poster-controls"><p>海报尺寸 1080 × 1440，仅在浏览器本地生成，不包含原始照片、聊天或文字内容。</p><button className="primary-action" disabled={!dataUrl} onClick={download}>下载海报 <Icon name="download" /></button><button className="secondary-action" disabled={!dataUrl} onClick={share}>分享给朋友 <Icon name="share" /></button></div></div></Modal>;
 }
 
 function HistoryModal({ history, onClose, onSelect, onClear }) {
-  return <Modal title="鉴定记录" onClose={onClose}><div className="history-list">{history.length ? history.map((item) => <button key={`${item.id}-${item.createdAt}`} onClick={() => { onSelect(item); onClose(); }}><span>{new Date(item.createdAt).toLocaleDateString('zh-CN')}</span><strong>{item.score}</strong><em>{item.type}</em><Icon name="arrow" size={17} /></button>) : <p className="empty-history">还没有鉴定记录。<br />第一份豪气档案正在等你。</p>}</div>{history.length > 0 && <button className="text-action" onClick={onClear}>清空本地记录</button>}</Modal>;
+  return <Modal title="鉴定记录" onClose={onClose}><div className="history-list">{history.length ? history.map((item) => <button key={`${item.id}-${item.createdAt}`} onClick={() => { onSelect(item); onClose(); }}><span>{new Date(item.createdAt).toLocaleDateString('zh-CN')}</span><strong>{item.kind === 'pk' ? 'PK' : item.score}</strong><em>{item.kind === 'pk' ? item.battle.title : item.type}</em><Icon name="arrow" size={17} /></button>) : <p className="empty-history">还没有鉴定记录。<br />第一份豪气档案正在等你。</p>}</div>{history.length > 0 && <button className="text-action" onClick={onClear}>清空本地记录</button>}</Modal>;
 }
 
 export default function App() {
@@ -538,7 +709,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header onHistory={() => setHistoryOpen(true)} />
-      {result ? <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Home onResult={setResult} addHistory={add} />}
+      {result ? (result.kind === 'pk' ? <PkResult result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} />) : <Home onResult={setResult} addHistory={add} />}
       <footer><strong>嘉豪鉴定所</strong><span>© {year} 嘉豪鉴定开源实验项目</span><span>大模型娱乐生成 · 本站不保存内容 · 不构成任何事实判断</span></footer>
       {posterOpen && <PosterModal result={result} onClose={() => setPosterOpen(false)} />}
       {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onSelect={(item) => { setResult(item); window.scrollTo({ top: 0 }); }} onClear={clear} />}
