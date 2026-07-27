@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { imageFileToDataUrl, prepareFiles, validateFiles } from './fileProcessing';
 import { decideFallbackWinner } from './validation';
+import './styles.css';
 
 const SITE_URL = 'https://jiahao.versecraft.cn';
 const ASSET_BASE_URL = (import.meta.env.VITE_ASSET_BASE_URL || 'https://assets.versecraft.cn/jiahao').replace(/\/$/, '');
+const LOCAL_ASSET_BASE_URL = `${import.meta.env.BASE_URL}assets`.replace(/\/$/, '');
 const MODEL_FALLBACK_NOTICE = '云端大模型太火爆，暂时用豪之算法进行计算';
 
 const MODES = [
@@ -15,15 +17,15 @@ const MODES = [
 ];
 
 const SPECIES = [
-  { name: '自在极意豪', en: '极意形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '0% center', summary: '豪气自行运转，万物皆可成为舞台。', clue: '黑口罩、苹果耳机、低头侧脸；越不解释越有戏。' },
-  { name: '美式嘉豪', en: '潮流形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '50% center', summary: '墨镜一戴，自以为很潮的松弛感开始接管画面。', clue: '棒球夹克、冰美式，走两步就像在拍音乐短片。' },
-  { name: '深情破碎豪', en: '深夜形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '100% center', summary: '嘴上说无所谓，歌单已经循环八遍。', clue: '深夜、侧脸，以及没发出去的长文。' },
-  { name: '计算机嘉豪', en: '终端形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, crop: '0% center', summary: '终端常驻，配置单和键盘轴体张口就来。', clue: '不一定在写代码，但一定在讲底层。' },
-  { name: '股票嘉豪', en: '行情形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, crop: '50% center', summary: '行情线一开口，宏观叙事自动生成。', clue: '涨了“早就说了”，跌了“长期价值”。' },
-  { name: '不懂装懂豪', en: '抽象形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, crop: '100% center', summary: '术语密度拉满，细问就是底层逻辑。', clue: '闭环、赋能、认知差，主打一个语义防御。' },
-  { name: '小众优越豪', en: '冷门形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '50% center', summary: '不是冷门，只是你们暂时还没听懂。', clue: '越不解释，越等待别人追问。' },
-  { name: '潜伏嘉豪', en: '静默形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '100% center', summary: '表面风平浪静，细节里全是豪气伏笔。', clue: '一句“随便”里藏着十八层构图。' },
-  { name: '反向嘉豪', en: '反向形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, crop: '0% center', summary: '越是否认自己嘉豪，豪气越难以隐藏。', clue: '我真没装——通常是最响的前奏。' },
+  { name: '自在极意豪', en: '极意形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-blue.png`, crop: '0% center', summary: '豪气自行运转，万物皆可成为舞台。', clue: '黑口罩、苹果耳机、低头侧脸；越不解释越有戏。' },
+  { name: '美式嘉豪', en: '潮流形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-blue.png`, crop: '50% center', summary: '墨镜一戴，自以为很潮的松弛感开始接管画面。', clue: '棒球夹克、冰美式，走两步就像在拍音乐短片。' },
+  { name: '深情破碎豪', en: '深夜形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-blue.png`, crop: '100% center', summary: '嘴上说无所谓，歌单已经循环八遍。', clue: '深夜、侧脸，以及没发出去的长文。' },
+  { name: '计算机嘉豪', en: '终端形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-labs.png`, crop: '0% center', summary: '终端常驻，配置单和键盘轴体张口就来。', clue: '不一定在写代码，但一定在讲底层。' },
+  { name: '股票嘉豪', en: '行情形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-labs.png`, crop: '50% center', summary: '行情线一开口，宏观叙事自动生成。', clue: '涨了“早就说了”，跌了“长期价值”。' },
+  { name: '不懂装懂豪', en: '抽象形态', asset: `${ASSET_BASE_URL}/species-labs-0726b69b115d.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-labs.png`, crop: '100% center', summary: '术语密度拉满，细问就是底层逻辑。', clue: '闭环、赋能、认知差，主打一个语义防御。' },
+  { name: '小众优越豪', en: '冷门形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-blue.png`, crop: '50% center', summary: '不是冷门，只是你们暂时还没听懂。', clue: '越不解释，越等待别人追问。' },
+  { name: '潜伏嘉豪', en: '静默形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-blue.png`, crop: '100% center', summary: '表面风平浪静，细节里全是豪气伏笔。', clue: '一句“随便”里藏着十八层构图。' },
+  { name: '反向嘉豪', en: '反向形态', asset: `${ASSET_BASE_URL}/species-blue-e84f59b60d69.png`, posterAsset: `${LOCAL_ASSET_BASE_URL}/jiahao-species-blue.png`, crop: '0% center', summary: '越是否认自己嘉豪，豪气越难以隐藏。', clue: '我真没装——通常是最响的前奏。' },
 ];
 
 const DIMENSION_META = [
@@ -50,6 +52,16 @@ const EXAMPLES = [
   '不是不会解释，主要这个涉及认知闭环，你懂的。',
 ];
 
+const QUOTE_LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
+const QUOTE_STYLES = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
+const QUOTE_PRESETS = [
+  ['豪气冲天', '高冷'],
+  ['豪气逼人', '深情'],
+  ['自在极意豪', '小众'],
+  ['豪气冲天', '朋友圈'],
+  ['豪气初现', '评论区'],
+];
+
 function Icon({ name, size = 20 }) {
   const paths = {
     arrow: <><path d="M4 12h15"/><path d="m14 5 7 7-7 7"/></>,
@@ -69,6 +81,8 @@ function Icon({ name, size = 20 }) {
     spark: <><path d="m12 3 1.4 4.6L18 9l-4.6 1.4L12 15l-1.4-4.6L6 9l4.6-1.4z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14"/></>,
+    copy: <><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M16 8V4H4v12h4"/></>,
+    spark: <><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7z"/></>,
   };
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -194,6 +208,58 @@ async function analyzeWithCloud(input, mode, files, prepared) {
   };
 }
 
+function makeFallbackQuote(input, mode, level, style, variation = 0) {
+  const source = input.trim().replace(/[。！？!?]+$/, '');
+  if (mode === 'dehao') {
+    const normalized = source
+      .replace(/你们(可能)?(也)?(不一定懂|理解不了)/g, '这件事比较复杂')
+      .replace(/我也没说什么[，,]?只是/g, '')
+      .replace(/懂的都懂/g, '这里不展开说明')
+      .replace(/算了[，,]?你记住就好/g, '暂时先这样');
+    const outputs = [
+      `${normalized || '这件事比较复杂'}，我暂时不想解释。`,
+      `${normalized || '我的意思比较简单'}，没有其他暗示。`,
+      `简单来说，${normalized || '我现在不方便详细说明'}。`,
+    ];
+    return outputs[variation % outputs.length];
+  }
+
+  const subject = /不想说|沉默|没话/.test(source) ? '没话说' : /累/.test(source) ? '累' : /难过|伤心/.test(source) ? '难过' : /忙/.test(source) ? '忙' : '这点事';
+  const byLevel = {
+    豪气初现: `${source}，不过也没什么。`,
+    豪气逼人: `${subject === '这点事' ? '事情难不难' : `${subject}不${subject}`}其实无所谓，反正这些事一直都是我自己扛。`,
+    豪气冲天: `不是${subject}，只是有些事情，说了你们也不一定懂。`,
+    自在极意豪: `${/累/.test(source) ? '身体会累' : '事情会过去'}，但我不会。算了，你记住就好。`,
+  };
+  const base = byLevel[level] || byLevel['豪气冲天'];
+  const styleVariants = {
+    深情: variation % 2 ? `我不是放不下${source ? `，只是${source}` : ''}。有些话到了深夜，就不用再说了。` : `${base} 可能沉默久了，连遗憾都显得多余。`,
+    高冷: base,
+    小众: `${base} 这种感觉本来就不是给所有人理解的。`,
+    无意炫耀: `${source}。也不算什么，毕竟这种程度我早就习惯了。`,
+    战斗: `${source}可以，但别把它当成我停下来的理由。`,
+    朋友圈: `${base}\n\n有些状态，不需要解释。`,
+    个性签名: `我不解释，时间自然会替我开口。`,
+    评论区: `也没什么好说的，经历过的人自然懂。`,
+  };
+  return styleVariants[style] || base;
+}
+
+async function generateQuoteWithCloud(input, mode, level, style) {
+  const response = await fetch('/api/quote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: input.trim(), mode, level, style }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || '云端语录生成暂时不可用');
+  }
+  const payload = await response.json();
+  if (!payload.output) throw new Error('语录生成结果为空');
+  return { output: payload.output, source: payload.source || '云端文字大模型' };
+}
+
 function makeFallbackPk(participants) {
   const results = participants.map((participant) => ({
     name: participant.name,
@@ -256,10 +322,10 @@ function Radar({ dimensions, compact = false }) {
   );
 }
 
-function ModelSourceNotice({ source, fallbackNotice }) {
+function ModelSourceNotice({ source, fallbackNotice, compact = false }) {
   const isFallback = Boolean(fallbackNotice);
   return (
-    <div className={`model-source-notice ${isFallback ? 'is-fallback' : 'is-cloud'}`} role="status">
+    <div className={`model-source-notice ${isFallback ? 'is-fallback' : 'is-cloud'} ${compact ? 'is-compact' : ''}`} role="status">
       <Icon name={isFallback ? 'spark' : 'check'} size={18} />
       <div>
         <strong>{isFallback ? fallbackNotice : '云端分析已完成'}</strong>
@@ -314,6 +380,22 @@ function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 3) {
   lines.slice(0, maxLines).forEach((item, index) => ctx.fillText(item, x, y + index * lineHeight));
 }
 
+function loadPosterImage(src, label) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const timeout = window.setTimeout(() => reject(new Error(`${label}加载超时`)), 12_000);
+    const settle = (callback) => {
+      window.clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
+      callback();
+    };
+    image.onload = () => settle(() => resolve(image));
+    image.onerror = () => settle(() => reject(new Error(`${label}加载失败`)));
+    image.src = src;
+  });
+}
+
 async function makePoster(result) {
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
@@ -326,10 +408,8 @@ async function makePoster(result) {
   ctx.strokeRect(24, 24, 1032, 1392);
 
   const species = SPECIES.find((item) => item.name === result.type) || SPECIES[0];
-  const img = new Image();
-  img.src = species.asset;
-  await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; });
-  if (img.complete && img.naturalWidth) {
+  const img = await loadPosterImage(species.posterAsset, '海报配图').catch(() => null);
+  if (img?.naturalWidth) {
     const crop = species.crop.startsWith('100') ? 2 : species.crop.startsWith('50') ? 1 : 0;
     const sx = img.naturalWidth / 3 * crop;
     ctx.save();
@@ -377,9 +457,7 @@ async function makePoster(result) {
   ctx.font = '900 34px Arial, sans-serif';
   drawWrappedText(ctx, result.verdict, 72, 1150, 690, 46, 3);
   const qr = await QRCode.toDataURL(SITE_URL, { margin: 0, width: 150, color: { dark: '#eaf2ff', light: '#070b12' } });
-  const qrImg = new Image();
-  qrImg.src = qr;
-  await new Promise((resolve) => { qrImg.onload = resolve; });
+  const qrImg = await loadPosterImage(qr, '二维码');
   ctx.drawImage(qrImg, 840, 1130, 150, 150);
   ctx.fillStyle = '#eaf2ff';
   ctx.font = '600 20px monospace';
@@ -414,21 +492,22 @@ async function makePkPoster(result) {
   ctx.fillStyle = '#73d7ff'; ctx.font = '900 66px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(result.battle.title, 540, 1010);
   ctx.textAlign = 'left'; ctx.fillStyle = '#eaf2ff'; ctx.font = '700 28px Arial, sans-serif'; drawWrappedText(ctx, result.battle.reason, 170, 1080, 740, 42, 3);
   const qr = await QRCode.toDataURL(SITE_URL, { margin: 0, width: 150, color: { dark: '#eaf2ff', light: '#070b12' } });
-  const qrImg = new Image(); qrImg.src = qr; await new Promise((resolve) => { qrImg.onload = resolve; });
+  const qrImg = await loadPosterImage(qr, '二维码');
   ctx.drawImage(qrImg, 840, 1210, 150, 150);
   ctx.fillStyle = '#eaf2ff'; ctx.font = '600 20px monospace'; ctx.fillText('模型综合裁决 · 仅供娱乐', 70, 1320); ctx.fillText('海报不包含原始素材', 70, 1360);
   return canvas.toDataURL('image/png');
 }
 
-function Header({ onHistory }) {
+function Header({ page, onNavigate, onHistory }) {
   return (
     <header className="site-header">
-      <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="返回首页"><span>嘉豪</span>鉴定所</button>
+      <button className="brand" onClick={() => onNavigate('assay')} aria-label="返回鉴定首页"><span>嘉豪</span>鉴定所</button>
       <nav aria-label="主导航">
-        <a href="#species">嘉豪图鉴</a>
-        <button onClick={onHistory}>鉴定记录</button>
+        <button className={page === 'assay' ? 'active' : ''} aria-current={page === 'assay' ? 'page' : undefined} onClick={() => onNavigate('assay')}>鉴定</button>
+        <button className={page === 'quotes' ? 'active' : ''} aria-current={page === 'quotes' ? 'page' : undefined} onClick={() => onNavigate('quotes')}>语录生成器</button>
+        <button onClick={() => { onNavigate('assay'); window.setTimeout(() => document.querySelector('#species')?.scrollIntoView({ behavior: 'smooth' }), 0); }}>图鉴</button>
       </nav>
-      <a className="header-cta" href="#assay">开始鉴定 <Icon name="arrow" size={18} /></a>
+      <button className="header-cta" onClick={onHistory}>我的鉴定 <Icon name="history" size={18} /></button>
     </header>
   );
 }
@@ -518,7 +597,7 @@ function PkForm({ onResult, addHistory }) {
     } catch (reason) { setError(reason.message || '素材处理失败，请检查文件后重试。'); }
     finally { setAnalyzing(false); }
   };
-  return <div className="pk-form"><div className="pk-contestants"><ParticipantComposer label="选手 A" accent="blue" value={participants[0]} onChange={(value) => update(0, value)} onOpenCamera={() => setCameraFor(0)} /><span className="versus" aria-hidden="true">VS</span><ParticipantComposer label="选手 B" accent="orange" value={participants[1]} onChange={(value) => update(1, value)} onOpenCamera={() => setCameraFor(1)} /></div><label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我确认拥有双方素材的合法授权，并同意用于本次娱乐分析；本站不保存原始内容。</label>{error ? <p className="form-error" role="alert">PK 中止 / {error}</p> : null}<button className="primary-action" onClick={start} disabled={analyzing}>{analyzing ? '双方豪气汇聚中……' : <>开始豪气 PK <Icon name="sword" size={24} /></>}</button>{cameraFor !== null ? <CameraModal onClose={() => setCameraFor(null)} onCapture={(file) => update(cameraFor, { ...participants[cameraFor], files: [file], error: '' })} /> : null}</div>;
+  return <div className="pk-form"><div className="pk-contestants"><ParticipantComposer label="选手 A" accent="blue" value={participants[0]} onChange={(value) => update(0, value)} onOpenCamera={() => setCameraFor(0)} /><span className="versus" aria-hidden="true">VS</span><ParticipantComposer label="选手 B" accent="orange" value={participants[1]} onChange={(value) => update(1, value)} onOpenCamera={() => setCameraFor(1)} /></div><label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我确认拥有双方素材的合法授权，并同意用于本次娱乐分析；本站不保存原始内容。</label>{error ? <p className="form-error" role="alert">PK 中止 / {error}</p> : null}<button className={`primary-action ${analyzing ? 'is-loading' : ''}`} onClick={start} disabled={analyzing} aria-busy={analyzing}>{analyzing ? '双方豪气汇聚中……' : <>开始豪气 PK <Icon name="sword" size={24} /></>}</button>{cameraFor !== null ? <CameraModal onClose={() => setCameraFor(null)} onCapture={(file) => update(cameraFor, { ...participants[cameraFor], files: [file], error: '' })} /> : null}</div>;
 }
 
 function AssayForm({ onResult, addHistory, mode, onModeChange }) {
@@ -530,6 +609,7 @@ function AssayForm({ onResult, addHistory, mode, onModeChange }) {
   const [notes, setNotes] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [step, setStep] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef(null);
   const selectMode = (next) => { onModeChange(next); setError(''); setFiles([]); setNotes([]); };
   const onFiles = (list) => {
@@ -582,7 +662,7 @@ function AssayForm({ onResult, addHistory, mode, onModeChange }) {
                 </div>
               </div>
             ) : (
-              <button className="drop-zone" onClick={() => fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onFiles(event.dataTransfer.files); }}><Icon name="file" size={34} /><strong>{files.length ? `已捕获 ${files.length} 份聊天素材` : MODES.find((item) => item.id === mode).hint}</strong><span>点击选择或拖到这里 · 最多 3 份 · 单份 10MB 内</span></button>
+              <button className={`drop-zone ${dragActive ? 'is-dragging' : ''}`} onClick={() => fileRef.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => { event.preventDefault(); setDragActive(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); onFiles(event.dataTransfer.files); }}><Icon name="file" size={34} /><strong>{files.length ? `已捕获 ${files.length} 份聊天素材` : MODES.find((item) => item.id === mode).hint}</strong><span>点击选择或拖到这里 · 最多 3 份 · 单份 10MB 内</span></button>
             )}
             <input ref={fileRef} type="file" accept={mode === 'photo' ? 'image/*' : 'image/jpeg,image/png,image/webp,application/pdf,text/plain,.docx'} multiple={mode === 'chat'} hidden onChange={(event) => onFiles(event.target.files)} />
           </div>
@@ -591,7 +671,7 @@ function AssayForm({ onResult, addHistory, mode, onModeChange }) {
           <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><Icon name="check" size={15} /></span>我同意将内容发送至云端大模型做娱乐分析；本站不保存内容。</label>
           {notes.length ? <p className="processing-note">{notes.join('；')}</p> : null}
           {error ? <p className="form-error" role="alert">鉴定中止 / {error}</p> : null}
-          <button className="primary-action" onClick={start} disabled={analyzing}>{analyzing ? ANALYSIS_STEPS[step] : <>开始鉴定 <Icon name="arrow" size={26} /></>}</button>
+          <button className={`primary-action ${analyzing ? 'is-loading' : ''}`} onClick={start} disabled={analyzing} aria-busy={analyzing}>{analyzing ? ANALYSIS_STEPS[step] : <>开始鉴定 <Icon name="arrow" size={26} /></>}</button>
           {analyzing ? <><span className="sr-only" role="status" aria-live="polite">{ANALYSIS_STEPS[step]}</span><div className="analysis-progress" aria-hidden="true"><span style={{ width: `${(step + 1) * 20}%` }} /></div></> : null}
           {cameraOpen ? <CameraModal onClose={() => setCameraOpen(false)} onCapture={(file) => { setFiles([file]); setError(''); }} /> : null}
         </>
@@ -629,18 +709,195 @@ function Home({ onResult, addHistory }) {
   );
 }
 
+function downloadQuoteCard(quote, level, style) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1440;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#070b12';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#2f7bff';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(42, 42, 996, 1356);
+  ctx.strokeStyle = 'rgba(115,215,255,.28)';
+  ctx.strokeRect(68, 68, 944, 1304);
+  ctx.fillStyle = '#2f7bff';
+  ctx.fillRect(68, 68, 250, 8);
+  ctx.fillStyle = '#eaf2ff';
+  ctx.font = '800 48px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('嘉豪鉴定所', 92, 152);
+  ctx.fillStyle = '#73d7ff';
+  ctx.font = '700 25px monospace';
+  ctx.fillText('JIAHAO QUOTE GENERATOR', 92, 198);
+  ctx.fillStyle = 'rgba(47,123,255,.22)';
+  ctx.font = '900 220px Arial, sans-serif';
+  ctx.fillText('“', 88, 470);
+  ctx.fillStyle = '#eaf2ff';
+  ctx.font = '800 62px "PingFang SC", "Microsoft YaHei", sans-serif';
+  drawWrappedText(ctx, quote.replace(/\n+/g, ' '), 118, 540, 840, 96, 6);
+  ctx.fillStyle = '#73d7ff';
+  ctx.font = '700 28px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText(`${level} · ${style}嘉豪`, 118, 1168);
+  ctx.strokeStyle = 'rgba(115,215,255,.3)';
+  ctx.beginPath(); ctx.moveTo(118, 1218); ctx.lineTo(962, 1218); ctx.stroke();
+  ctx.fillStyle = 'rgba(234,242,255,.65)';
+  ctx.font = '600 24px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('不是所有沉默都代表无话可说。', 118, 1280);
+  ctx.fillStyle = '#2f7bff';
+  ctx.fillRect(810, 1260, 152, 42);
+  ctx.fillStyle = '#eaf2ff';
+  ctx.font = '800 20px monospace';
+  ctx.fillText('JH / 语录', 829, 1288);
+  const link = document.createElement('a');
+  link.download = `嘉豪语录-${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function QuoteGenerator() {
+  const [mode, setMode] = useState('hao');
+  const [input, setInput] = useState('今天有点累。');
+  const [level, setLevel] = useState('豪气冲天');
+  const [style, setStyle] = useState('高冷');
+  const [output, setOutput] = useState('不是累，只是有些事情，说了你们也不一定懂。');
+  const [generating, setGenerating] = useState(false);
+  const [variation, setVariation] = useState(0);
+  const [notice, setNotice] = useState('');
+  const [modelStatus, setModelStatus] = useState(null);
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
+    setNotice('');
+    setModelStatus(null);
+    if (nextMode === 'dehao') {
+      setInput('我也没说什么，只是你们可能理解不了。');
+      setOutput('这件事比较复杂，我暂时不想解释。');
+    } else {
+      setInput('今天有点累。');
+      setOutput('不是累，只是有些事情，说了你们也不一定懂。');
+    }
+  };
+
+  const generate = async (nextVariation = variation + 1) => {
+    if (input.trim().length < 2) return setNotice('先输入一句话，嘉豪频道才能接通信号。');
+    setGenerating(true);
+    setNotice('');
+    setVariation(nextVariation);
+    const startedAt = Date.now();
+    let nextOutput;
+    let nextModelStatus;
+    try {
+      const generated = await generateQuoteWithCloud(input, mode, level, style);
+      nextOutput = generated.output;
+      nextModelStatus = { source: generated.source };
+    } catch {
+      nextOutput = makeFallbackQuote(input, mode, level, style, nextVariation);
+      nextModelStatus = { source: '豪之算法', fallbackNotice: MODEL_FALLBACK_NOTICE };
+    }
+    const delay = Math.max(0, 620 - (Date.now() - startedAt));
+    window.setTimeout(() => { setOutput(nextOutput); setModelStatus(nextModelStatus); setGenerating(false); }, delay);
+    return undefined;
+  };
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(output); }
+    catch {
+      const area = document.createElement('textarea');
+      area.value = output; document.body.appendChild(area); area.select(); document.execCommand('copy'); area.remove();
+    }
+    setNotice('已复制，可以去群聊里无意地发一下了。');
+  };
+
+  return (
+    <main className="quote-page">
+      <section className="quote-intro">
+        <h1>把一句普通话，调成嘉豪频道。</h1>
+        <p>输入一句话，选择豪气与风格，生成一条刚好值得截图的嘉豪语录。</p>
+      </section>
+      <section className="quote-workspace" aria-label="嘉豪语录生成工作台">
+        <div className="quote-editor">
+          <div className="quote-field-head"><h2>原句</h2><span>{input.length} / 300</span></div>
+          <textarea aria-label="要转换的原句" maxLength={300} value={input} onChange={(event) => setInput(event.target.value)} />
+          <div className="quote-mode" role="tablist" aria-label="转换方向">
+            <button role="tab" aria-selected={mode === 'hao'} className={mode === 'hao' ? 'active' : ''} onClick={() => changeMode('hao')}><Icon name="spark" />豪化</button>
+            <button role="tab" aria-selected={mode === 'dehao'} className={mode === 'dehao' ? 'active' : ''} onClick={() => changeMode('dehao')}>一键说人话</button>
+          </div>
+          <fieldset className="quote-levels" disabled={mode === 'dehao'}>
+            <legend>豪气等级</legend>
+            <div>{QUOTE_LEVELS.map((item) => <button type="button" key={item} className={level === item ? 'active' : ''} aria-pressed={level === item} onClick={() => setLevel(item)}><i />{item}</button>)}</div>
+          </fieldset>
+          <fieldset className="quote-styles" disabled={mode === 'dehao'}>
+            <legend>风格模式</legend>
+            <div>{QUOTE_STYLES.map((item) => <button type="button" key={item} className={style === item ? 'active' : ''} aria-pressed={style === item} onClick={() => setStyle(item)}>{item}</button>)}</div>
+          </fieldset>
+          <button className={`primary-action quote-generate ${generating ? 'is-loading' : ''}`} onClick={() => generate()} disabled={generating}>{generating ? '豪气正在汇聚……' : <><Icon name="spark" />{mode === 'dehao' ? '一键把嘉豪说人话' : '生成嘉豪语录'}</>}</button>
+        </div>
+        <div className="quote-output" aria-live="polite">
+          <header><h2>本次输出</h2><span>{mode === 'dehao' ? '去豪化 · 正常表达' : `${level} · ${style}嘉豪`}</span></header>
+          {modelStatus ? <ModelSourceNotice source={modelStatus.source} fallbackNotice={modelStatus.fallbackNotice} compact /> : null}
+          <blockquote>{output}</blockquote>
+          <div className="quote-actions">
+            <button onClick={copy}><Icon name="copy" size={18} />复制语录</button>
+            <button onClick={() => { downloadQuoteCard(output, level, style); setNotice('卡片已生成；如未自动保存，请在浏览器菜单中下载图片。'); }}><Icon name="download" size={18} />保存卡片</button>
+            <button onClick={() => generate(variation + 1)}><Icon name="reset" size={18} />换一个</button>
+          </div>
+          <div className="share-card-preview" aria-label="分享卡片预览">
+            <span>分享卡片预览</span>
+            <div><i aria-hidden="true">“</i><p>{output}</p><strong>嘉豪语录生成器</strong></div>
+          </div>
+          <p className="quote-privacy"><Icon name="lock" size={14} /> 内容仅用于本次生成，不公开原句</p>
+          {notice ? <p className="quote-notice" role="status">{notice}</p> : null}
+        </div>
+      </section>
+      <section className="quote-presets" aria-label="最近使用预设"><strong>最近使用预设</strong>{QUOTE_PRESETS.map(([presetLevel, presetStyle]) => <button key={`${presetLevel}-${presetStyle}`} onClick={() => { setMode('hao'); setLevel(presetLevel); setStyle(presetStyle); }}>{presetLevel} · {presetStyle}</button>)}</section>
+    </main>
+  );
+}
+
 function SpeciesGallery({ selected }) {
   const [active, setActive] = useState(selected || 0);
+  const railRef = useRef(null);
+  const activeRef = useRef(active);
   const item = SPECIES[active];
+  useEffect(() => { activeRef.current = active; }, [active]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => railRef.current?.children[active]?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const selectSpecies = (index) => {
+    setActive(index);
+    railRef.current?.children[index]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  };
+  const syncSpeciesFromRail = () => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const center = rail.scrollLeft + rail.clientWidth / 2;
+    let closest = 0;
+    let distance = Number.POSITIVE_INFINITY;
+    [...rail.children].forEach((card, index) => {
+      const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+      const nextDistance = Math.abs(cardCenter - center);
+      if (nextDistance < distance) { closest = index; distance = nextDistance; }
+    });
+    if (closest !== activeRef.current) setActive(closest);
+  };
   return (
     <section className="species-section" id="species">
       <div className="section-number">物种档案 / 九种</div>
-      <div className="species-title"><h2>嘉豪物种图鉴</h2><p>同一种豪气，也有不同的进化路线。<br />滑动档案，认领你的精神分支。</p></div>
+      <div className="species-title"><h2>嘉豪物种图鉴</h2><p>同一种豪气，也有不同的进化路线。<br />滑动人物档案，认领你的精神分支。</p></div>
       <div className="species-stage">
         <div className="species-portrait" style={{ backgroundImage: `url(${item.asset})`, backgroundPosition: item.crop }}><span>{String(active + 1).padStart(2, '0')}</span></div>
         <div className="species-detail">
           <small>{item.en}</small><h3>{item.name}</h3><p>{item.summary}</p><blockquote>“{item.clue}”</blockquote>
-          <div className="species-switcher">{SPECIES.map((species, index) => <button key={species.name} onClick={() => setActive(index)} aria-label={`查看${species.name}`} aria-current={index === active}>{String(index + 1).padStart(2, '0')}</button>)}</div>
+        </div>
+      </div>
+      <div className="species-rail-shell">
+        <span>滑动切换档案</span><i aria-hidden="true" />
+        <div ref={railRef} className="species-rail" role="list" aria-label="嘉豪人物档案" onScroll={syncSpeciesFromRail}>
+          {SPECIES.map((species, index) => <button key={species.name} type="button" role="listitem" className={index === active ? 'active' : ''} onClick={() => selectSpecies(index)} aria-pressed={index === active} aria-label={`查看${species.name}`} style={{ backgroundImage: `linear-gradient(180deg, transparent 28%, rgba(7,11,18,.92)), url(${species.asset})`, backgroundPosition: species.crop }}><small>{String(index + 1).padStart(2, '0')}</small><strong>{species.name}</strong><em>{species.en}</em></button>)}
         </div>
       </div>
     </section>
@@ -705,8 +962,27 @@ function Modal({ title, onClose, children, wide = false }) {
 
 function PosterModal({ result, onClose }) {
   const [dataUrl, setDataUrl] = useState('');
-  useEffect(() => { let active = true; (result.kind === 'pk' ? makePkPoster(result) : makePoster(result)).then((url) => active && setDataUrl(url)); return () => { active = false; }; }, [result]);
-  const download = () => { const link = document.createElement('a'); link.download = result.kind === 'pk' ? `嘉豪PK-${result.battle.title}.png` : `嘉豪鉴定-${result.score}-${result.type}.png`; link.href = dataUrl; link.click(); };
+  const [generationError, setGenerationError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setDataUrl('');
+    setGenerationError('');
+    const createPoster = result.kind === 'pk' ? makePkPoster : makePoster;
+    createPoster(result).then((url) => {
+      if (active) setDataUrl(url);
+    }).catch(() => {
+      if (active) setGenerationError('海报生成失败，请检查网络后重试。');
+    });
+    return () => { active = false; };
+  }, [result, attempt]);
+  const download = () => {
+    if (!dataUrl) return;
+    const link = document.createElement('a');
+    link.download = result.kind === 'pk' ? `嘉豪PK-${result.battle.title}.png` : `嘉豪鉴定-${result.score}-${result.type}.png`;
+    link.href = dataUrl;
+    link.click();
+  };
   const share = async () => {
     if (!dataUrl) return;
     const blob = await (await fetch(dataUrl)).blob();
@@ -715,7 +991,7 @@ function PosterModal({ result, onClose }) {
     if (navigator.canShare?.({ files: [file] })) await navigator.share({ title: result.kind === 'pk' ? '双人豪气 PK' : '我的嘉豪鉴定', text, files: [file] });
     else download();
   };
-  return <Modal title={result.kind === 'pk' ? '分享双人 PK 海报' : '分享你的鉴定海报'} onClose={onClose} wide><div className="poster-modal-body">{dataUrl ? <img src={dataUrl} alt={result.kind === 'pk' ? `双人豪气 PK：${result.battle.title}` : `嘉豪指数 ${result.score}，${result.type}鉴定海报`} /> : <div className="poster-loading">豪气印刷中……</div>}<div className="poster-controls"><p>海报尺寸 1080 × 1440，仅在浏览器本地生成，不包含原始照片、聊天或文字内容。</p><button className="primary-action" disabled={!dataUrl} onClick={download}>下载海报 <Icon name="download" /></button><button className="secondary-action" disabled={!dataUrl} onClick={share}>分享给朋友 <Icon name="share" /></button></div></div></Modal>;
+  return <Modal title={result.kind === 'pk' ? '分享双人 PK 海报' : '分享你的鉴定海报'} onClose={onClose} wide><div className="poster-modal-body">{dataUrl ? <img src={dataUrl} alt={result.kind === 'pk' ? `双人豪气 PK：${result.battle.title}` : `嘉豪指数 ${result.score}，${result.type}鉴定海报`} /> : generationError ? <div className="poster-error" role="alert"><strong>{generationError}</strong><button className="secondary-action" onClick={() => setAttempt((value) => value + 1)}>重新生成</button></div> : <div className="poster-loading">豪气印刷中……</div>}<div className="poster-controls"><p>海报尺寸 1080 × 1440，仅在浏览器本地生成，不包含原始照片、聊天或文字内容。</p><button className="primary-action" disabled={!dataUrl} onClick={download}>下载海报 <Icon name="download" /></button><button className="secondary-action" disabled={!dataUrl} onClick={share}>分享给朋友 <Icon name="share" /></button></div></div></Modal>;
 }
 
 function HistoryModal({ history, onClose, onSelect, onClear }) {
@@ -723,18 +999,24 @@ function HistoryModal({ history, onClose, onSelect, onClear }) {
 }
 
 export default function App() {
+  const [page, setPage] = useState('quotes');
   const [result, setResult] = useState(null);
   const [posterOpen, setPosterOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { history, add, clear } = useHistory();
   const year = useMemo(() => new Date().getFullYear(), []);
+  const navigate = (nextPage) => {
+    setPage(nextPage);
+    if (nextPage !== 'assay') setResult(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   return (
     <div className="app-shell">
-      <Header onHistory={() => setHistoryOpen(true)} />
-      {result ? (result.kind === 'pk' ? <PkResult result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} />) : <Home onResult={setResult} addHistory={add} />}
+      <Header page={page} onNavigate={navigate} onHistory={() => setHistoryOpen(true)} />
+      {page === 'quotes' ? <QuoteGenerator /> : result ? (result.kind === 'pk' ? <PkResult result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} />) : <Home onResult={setResult} addHistory={add} />}
       <footer><strong>嘉豪鉴定所</strong><span>© {year} 嘉豪鉴定开源实验项目</span><span>大模型娱乐生成 · 本站不保存内容 · 不构成任何事实判断</span></footer>
       {posterOpen && <PosterModal result={result} onClose={() => setPosterOpen(false)} />}
-      {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onSelect={(item) => { setResult(item); window.scrollTo({ top: 0 }); }} onClear={clear} />}
+      {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onSelect={(item) => { setPage('assay'); setResult(item); window.scrollTo({ top: 0 }); }} onClear={clear} />}
     </div>
   );
 }

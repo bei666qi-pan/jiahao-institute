@@ -1,7 +1,10 @@
 import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { calculateEstimatedCost, Observability } from './server/observability.mjs';
+import { loginAdmin, logoutAdmin, verifyAdmin } from './server/admin-auth.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
@@ -11,7 +14,9 @@ const TEXT_API_KEY = process.env.DEEPSEEK_API_KEY;
 const VISION_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
 const VISION_API_KEY = process.env.ARK_API_KEY;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
+const observability = new Observability();
 
 const DIMENSIONS = ['mystery', 'flex', 'niche', 'deep', 'show', 'language'];
 const TYPES = ['自在极意豪', '美式嘉豪', '深情破碎豪', '计算机嘉豪', '股票嘉豪', '不懂装懂豪', '小众优越豪', '潜伏嘉豪', '反向嘉豪', '无意炫耀豪'];
@@ -56,6 +61,18 @@ const PK_SYSTEM_PROMPT = `你是“嘉豪鉴定所”的双人豪气裁决官。
   "battle": {"winner":"A或B或tie","title":"12字以内","reason":"40到100字","decisiveDimensions":["一到三个中文维度名"]}
 }`;
 
+const QUOTE_SYSTEM_PROMPT = `你是“嘉豪语录生成器”的中文文案改写官。这是一个友善的娱乐玩梗工具，不得侮辱、骚扰或煽动伤害任何人，也不要生成仇恨、色情、违法或针对敏感属性的内容。
+
+你有两种任务：
+1. hao：把普通话改写成“嘉豪式”表达。特点是克制、欲言又止、看似无所谓、略带戏剧化留白，但不要堆砌网络烂梗。
+2. dehao：去掉故作高深、否定式强调和优越感，把原句改成直接、自然、礼貌的普通表达。
+
+豪气等级从弱到强：豪气初现、豪气逼人、豪气冲天、自在极意豪。
+风格包括：深情、高冷、小众、无意炫耀、战斗、朋友圈、个性签名、评论区。
+
+只返回一个合法 JSON 对象，不要 Markdown，不要解释。严格结构：
+{"output":"改写结果，8到80个中文字符，可以按风格使用换行"}`;
+
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -68,11 +85,12 @@ const CONTENT_TYPES = {
   '.json': 'application/json; charset=utf-8',
 };
 
-function sendJson(res, status, data) {
+function sendJson(res, status, data, cookies = []) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    ...(cookies.length ? { 'Set-Cookie': cookies } : {}),
   });
   res.end(JSON.stringify(data));
 }
@@ -144,8 +162,14 @@ function extractJson(text) {
 
 function getProvider(isVision) {
   return isVision
-    ? { base: VISION_API_BASE, model: VISION_MODEL, key: VISION_API_KEY, source: '云端多模态大模型' }
-    : { base: TEXT_API_BASE, model: TEXT_MODEL, key: TEXT_API_KEY, source: '云端文字大模型' };
+    ? {
+      id: 'ark', base: VISION_API_BASE, model: VISION_MODEL, key: VISION_API_KEY, source: '云端多模态大模型',
+      prices: { input: process.env.ARK_INPUT_CNY_PER_MILLION, output: process.env.ARK_OUTPUT_CNY_PER_MILLION, cachedInput: process.env.ARK_CACHED_INPUT_CNY_PER_MILLION },
+    }
+    : {
+      id: 'deepseek', base: TEXT_API_BASE, model: TEXT_MODEL, key: TEXT_API_KEY, source: '云端文字大模型',
+      prices: { input: process.env.DEEPSEEK_INPUT_CNY_PER_MILLION, output: process.env.DEEPSEEK_OUTPUT_CNY_PER_MILLION, cachedInput: process.env.DEEPSEEK_CACHED_INPUT_CNY_PER_MILLION },
+    };
 }
 
 export function validImages(value, maximum = 9) {
@@ -167,7 +191,7 @@ async function requestModel(provider, systemPrompt, content) {
     const data = await response.json();
     const contentText = data.choices?.[0]?.message?.content;
     if (typeof contentText !== 'string') throw new Error('大模型返回内容为空');
-    return extractJson(contentText);
+    return { output: extractJson(contentText), usage: data.usage || null };
   } finally { clearTimeout(timeout); }
 }
 
@@ -179,7 +203,8 @@ async function analyzeWithModel(payload) {
   const extractedText = cleanText(payload.extractedText, '', 20_000);
   const content = [{ type: 'text', text: `鉴定方式：${modeLabel}\n用户内容：${userText}\n文件提取内容：${extractedText || '无'}\n请严格按要求生成娱乐鉴定 JSON。` }];
   for (const image of validImages(payload.images)) content.push({ type: 'image_url', image_url: { url: image } });
-  return { ...normalizeResult(await requestModel(provider, SYSTEM_PROMPT, content)), source: provider.source };
+  const modelResponse = await requestModel(provider, SYSTEM_PROMPT, content);
+  return { data: { ...normalizeResult(modelResponse.output), source: provider.source }, usage: modelResponse.usage, provider };
 }
 
 async function analyzePkWithModel(payload) {
@@ -199,8 +224,55 @@ async function analyzePkWithModel(payload) {
     participant.images.forEach((image) => content.push({ type: 'image_url', image_url: { url: image } }));
   });
   content.push({ type: 'text', text: '请严格按要求分别分析并完成综合裁决。' });
-  const raw = await requestModel(provider, PK_SYSTEM_PROMPT, content);
-  return normalizePkResult(raw, participants.map((participant) => participant.name), provider.source === '云端多模态大模型' ? '模型综合裁决 · 多模态' : '模型综合裁决 · 文字');
+  const modelResponse = await requestModel(provider, PK_SYSTEM_PROMPT, content);
+  return {
+    data: normalizePkResult(modelResponse.output, participants.map((participant) => participant.name), provider.source === '云端多模态大模型' ? '模型综合裁决 · 多模态' : '模型综合裁决 · 文字'),
+    usage: modelResponse.usage,
+    provider,
+  };
+}
+
+async function generateQuoteWithModel(payload) {
+  const mode = payload.mode === 'dehao' ? 'dehao' : 'hao';
+  const level = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'].includes(payload.level) ? payload.level : '豪气冲天';
+  const style = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'].includes(payload.style) ? payload.style : '高冷';
+  const input = cleanText(payload.input, '', 300);
+  if (input.length < 2) throw new Error('至少输入两个字');
+  const provider = getProvider(false);
+  const modelResponse = await requestModel(provider, QUOTE_SYSTEM_PROMPT, `任务：${mode}\n豪气等级：${level}\n风格：${style}\n原句：${input}\n请只返回 JSON。`);
+  return {
+    data: { output: cleanText(modelResponse.output.output, mode === 'dehao' ? '这件事比较复杂，我暂时不想解释。' : '也没什么，只是有些事情，说了你们也不一定懂。', 160), source: provider.source },
+    usage: modelResponse.usage,
+    provider,
+  };
+}
+
+async function handleModelRequest(req, res, endpoint, handler) {
+  const started = performance.now();
+  const requestId = randomUUID();
+  let payload;
+  let modelInfo = null;
+  try {
+    payload = await readJson(req);
+    const response = await handler(payload);
+    modelInfo = response;
+    const cost = calculateEstimatedCost(response.usage, response.provider.prices);
+    sendJson(res, 200, response.data);
+    void observability.recordApiRequest(req, {
+      requestId, endpoint, mode: payload.mode || (endpoint === '/api/pk' ? 'pk' : null), provider: response.provider.id,
+      model: response.provider.model, statusCode: 200, ok: true, latencyMs: performance.now() - started, ...cost,
+    });
+  } catch (error) {
+    const message = error?.name === 'AbortError' ? '大模型响应超时' : cleanText(error?.message, '服务暂时不可用', 100);
+    const statusCode = message.includes('体积') ? 413 : 503;
+    const provider = modelInfo?.provider || getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
+    void observability.recordApiRequest(req, {
+      requestId, endpoint, mode: payload?.mode || (endpoint === '/api/pk' ? 'pk' : null), provider: provider.id,
+      model: provider.model, statusCode, ok: false, latencyMs: performance.now() - started,
+      errorCode: error?.name === 'AbortError' ? 'TIMEOUT' : 'MODEL_REQUEST_FAILED', errorMessage: message,
+    });
+    return sendJson(res, statusCode, { error: message });
+  }
 }
 
 async function serveStatic(req, res) {
@@ -226,25 +298,60 @@ async function serveStatic(req, res) {
   res.end(body);
 }
 
-const server = createServer(async (req, res) => {
+export const server = createServer(async (req, res) => {
   try {
-    if (req.method === 'GET' && req.url === '/healthz') return sendJson(res, 200, {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const pathname = url.pathname;
+    if (req.method === 'GET' && pathname === '/healthz') return sendJson(res, 200, {
       status: 'ok',
       textModelConfigured: Boolean(TEXT_API_KEY),
       visionModelConfigured: Boolean(VISION_API_KEY),
       textModel: TEXT_MODEL,
       visionModel: VISION_MODEL,
+      observability: observability.status(),
     });
-    if (req.method === 'POST' && req.url === '/api/analyze') {
+
+    if (req.method === 'POST' && pathname === '/api/telemetry/session') {
       const payload = await readJson(req);
-      const result = await analyzeWithModel(payload);
-      return sendJson(res, 200, result);
+      const result = await observability.recordSession(req, payload);
+      return sendJson(res, 200, { tracked: !result.ignored }, result.cookies || []);
     }
-    if (req.method === 'POST' && req.url === '/api/pk') {
-      const payload = await readJson(req);
-      const result = await analyzePkWithModel(payload);
-      return sendJson(res, 200, result);
+    if (req.method === 'POST' && pathname === '/api/telemetry/heartbeat') {
+      await observability.heartbeat(req);
+      res.writeHead(204, { 'Cache-Control': 'no-store' });
+      return res.end();
     }
+
+    if (req.method === 'POST' && pathname === '/api/admin/login') {
+      const result = await loginAdmin(req, observability, ADMIN_PASSWORD);
+      return sendJson(res, result.status, result.body, result.cookies || []);
+    }
+    if (req.method === 'POST' && pathname === '/api/admin/logout') {
+      const result = await logoutAdmin(req, observability);
+      return sendJson(res, result.status, result.body, result.cookies || []);
+    }
+    if (pathname === '/api/admin/session' && req.method === 'GET') {
+      return sendJson(res, 200, { authenticated: await verifyAdmin(req, observability), configured: observability.enabled && Boolean(ADMIN_PASSWORD) });
+    }
+    if (pathname.startsWith('/api/admin/')) {
+      if (!(await verifyAdmin(req, observability))) return sendJson(res, 401, { error: '登录已失效，请重新验证' });
+      const range = url.searchParams.get('range') || '7d';
+      if (req.method === 'GET' && pathname === '/api/admin/overview') return sendJson(res, 200, await observability.overview(range));
+      if (req.method === 'GET' && pathname === '/api/admin/visits') return sendJson(res, 200, await observability.visits(range, url.searchParams.get('cursor'), url.searchParams.get('limit')));
+      if (req.method === 'GET' && pathname === '/api/admin/requests') return sendJson(res, 200, await observability.requests(range, url.searchParams.get('cursor'), {
+        endpoint: url.searchParams.get('endpoint'), status: url.searchParams.get('status'), limit: url.searchParams.get('limit'),
+      }));
+      if (req.method === 'GET' && pathname === '/api/admin/costs') return sendJson(res, 200, await observability.costs(range));
+      if (req.method === 'GET' && pathname === '/api/admin/status') return sendJson(res, 200, observability.status({
+        textModelConfigured: Boolean(TEXT_API_KEY), visionModelConfigured: Boolean(VISION_API_KEY),
+        adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_MODEL, visionModel: VISION_MODEL,
+      }));
+      return sendJson(res, 404, { error: '后台接口不存在' });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/analyze') return handleModelRequest(req, res, pathname, analyzeWithModel);
+    if (req.method === 'POST' && pathname === '/api/pk') return handleModelRequest(req, res, pathname, analyzePkWithModel);
+    if (req.method === 'POST' && pathname === '/api/quote') return handleModelRequest(req, res, pathname, generateQuoteWithModel);
     if (req.method === 'GET' || req.method === 'HEAD') return await serveStatic(req, res);
     return sendJson(res, 405, { error: '不支持的请求方式' });
   } catch (error) {
@@ -254,6 +361,13 @@ const server = createServer(async (req, res) => {
 });
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  try {
+    await observability.init();
+    void observability.maintain();
+    setInterval(() => void observability.maintain(), 60 * 60 * 1000).unref();
+  } catch (error) {
+    console.error(`观测数据库初始化失败：${cleanText(error?.message, '未知错误', 120)}`);
+  }
   server.listen(PORT, '::', () => {
     console.log(`嘉豪鉴定服务已启动：${PORT}`);
   });

@@ -29,6 +29,7 @@
 | 多模态鉴定 | 照片优先，支持授权自拍、相册、文字与聊天记录。 |
 | 聊天文件分析 | 支持图片、PDF、TXT 与 DOCX；单次最多 3 份、单份 10MB。 |
 | 双人豪气 PK | 双方可分别提交照片、聊天或文字，由模型完成综合娱乐裁决。 |
+| 嘉豪语录生成器 | 将普通话按豪气等级与风格改写，支持一键去豪化、复制与分享卡片。 |
 | AI 趣味判词 | 由模型生成戏剧化分析过程、嘉豪指数与专属判词。 |
 | 六维豪气成分 | 用雷达图呈现你的豪气构成，一眼看懂人格配方。 |
 | 物种图鉴 | 解锁不同嘉豪物种与隐藏天赋。 |
@@ -63,6 +64,25 @@ npm start
 | 照片与聊天截图鉴定 | `ARK_MODEL` |
 
 物种图片默认通过现有火山引擎 TOS + CDN 链路 `https://assets.versecraft.cn/jiahao` 加载；如需切换资源域名，可在构建时设置 `VITE_ASSET_BASE_URL`。
+
+### 流量与成本观测台
+
+部署后访问 `/admin`。观测台使用第一方匿名设备 ID 统计访客、会话、页面浏览与有效活跃时长，同时记录模型接口的状态、延迟、token 用量和预估人民币成本；不会保存用户提交的文字、图片、聊天内容或模型结果。
+
+必须在部署平台的 Secret/环境变量中配置：
+
+```bash
+DATABASE_URL=postgresql://...
+ADMIN_PASSWORD=请使用高强度密码
+DEEPSEEK_INPUT_CNY_PER_MILLION=
+DEEPSEEK_OUTPUT_CNY_PER_MILLION=
+DEEPSEEK_CACHED_INPUT_CNY_PER_MILLION=
+ARK_INPUT_CNY_PER_MILLION=
+ARK_OUTPUT_CNY_PER_MILLION=
+ARK_CACHED_INPUT_CNY_PER_MILLION=
+```
+
+单价单位为「人民币 / 百万 token」。缺少供应商 usage 或单价时，该请求显示为未计价，不会被误记为零成本。数据库迁移在服务启动时自动执行；访问、会话与请求明细默认保留 90 天，成功汇总后再清理原始明细。
 
 ### 构建与部署
 
@@ -105,6 +125,7 @@ docker run --rm -p 8080:8080 jiahao-institute
 | --- | --- |
 | Multimodal analysis | Analyze text, photos, and chat screenshots. |
 | AI-generated verdicts | Receive dramatic analysis, a Jiahao Index, and a tailored verdict. |
+| Jiahao quote generator | Rewrite everyday text by intensity and style, normalize over-dramatic phrasing, and save share cards. |
 | Six-dimension profile | Explore your personality mix through an easy-to-read radar chart. |
 | Species collection | Discover Jiahao archetypes and hidden talents. |
 | Share-ready posters | Generate and download a 1080 × 1440 results poster. |
