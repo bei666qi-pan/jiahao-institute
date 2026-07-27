@@ -12,6 +12,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node server.mjs ./server.mjs
+COPY --chown=node:node server ./server
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json ./package.json
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=4s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

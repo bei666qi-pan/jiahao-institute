@@ -1,10 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.jsx';
-import './styles.css';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+async function boot() {
+  const admin = window.location.pathname.startsWith('/admin');
+  let App;
+  if (admin) {
+    ({ default: App } = await import('./admin/AdminApp.jsx'));
+  } else {
+    ({ default: App } = await import('./App.jsx'));
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+  if (!admin) {
+    const { startTelemetry } = await import('./telemetry.js');
+    startTelemetry();
+  }
+}
+
+boot();
