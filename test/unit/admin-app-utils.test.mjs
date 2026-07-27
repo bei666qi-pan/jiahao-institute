@@ -132,13 +132,13 @@ test('formatCost handles null', () => {
 
 // ---- formatTime ----
 test('formatTime formats datetime with time only', () => {
-  const d = new Date('2026-07-28T14:30:00+08:00');
+  const d = new Date(2026, 6, 28, 14, 30, 0);
   const result = formatTime(d);
   assert.ok(result.includes('14:30'));
 });
 
 test('formatTime withDate=true includes date', () => {
-  const d = new Date('2026-07-28T14:30:00+08:00');
+  const d = new Date(2026, 6, 28, 14, 30, 0);
   const result = formatTime(d, true);
   assert.ok(result.includes('07') || result.includes('28'));
   assert.ok(result.includes('14:30'));
