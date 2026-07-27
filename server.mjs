@@ -186,6 +186,6 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '::', () => {
   console.log(`嘉豪鉴定服务已启动：${PORT}`);
 });
