@@ -7,6 +7,7 @@
   --acid: #73d7ff;
   --opponent: #ff7657;
   --opponent-muted: #a94738;
+  --warning: #ffb14a;
   --line: 1px solid rgba(47, 123, 255, .62);
   --shadow: 0 0 0 1px rgba(115, 215, 255, .12), 0 0 26px rgba(47, 123, 255, .13);
   color: var(--ink);
@@ -92,6 +93,13 @@ button:disabled { cursor: wait; opacity: .7; }
 .consent input:not(:checked) + span svg { opacity: 0; }
 .consent input:focus-visible + span { outline: 4px solid var(--blue); outline-offset: 3px; }
 .form-error { margin: 0 3px 12px; padding: 9px 12px; border-left: 4px solid #ff4d67; background: rgba(255,77,103,.08); color: #ff9aaa; font-size: 12px; font-weight: 800; }
+.model-source-notice { display: flex; align-items: center; gap: 12px; margin: 0 0 24px; padding: 13px 16px; border: 1px solid rgba(115,215,255,.46); border-radius: 8px; background: rgba(47,123,255,.1); box-shadow: inset 0 0 24px rgba(47,123,255,.07); }
+.model-source-notice > .icon { flex: none; color: var(--blue); }
+.model-source-notice > div { min-width: 0; display: grid; gap: 3px; }
+.model-source-notice strong { color: var(--blue); font-size: 13px; }
+.model-source-notice span { color: rgba(234,242,255,.68); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.model-source-notice.is-fallback { border-color: rgba(255,177,74,.62); background: rgba(255,138,31,.1); box-shadow: inset 0 0 24px rgba(255,138,31,.06); }
+.model-source-notice.is-fallback > .icon, .model-source-notice.is-fallback strong { color: var(--warning); }
 .primary-action, .secondary-action { min-height: 60px; border: 1px solid rgba(115,215,255,.46); border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 22px; padding: 13px 28px; font-size: 18px; font-weight: 700; cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s; }
 .primary-action { width: 100%; background: linear-gradient(135deg, #246ce9, #438dff); color: white; box-shadow: inset 0 1px rgba(255,255,255,.2), 0 0 28px rgba(47,123,255,.22); }
 .primary-action:hover:not(:disabled) { background: #438aff; box-shadow: 0 0 30px rgba(47,123,255,.45); }
