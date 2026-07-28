@@ -1,0 +1,56 @@
+name: Verify Quote V3 Production
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Wait for v3 and exercise repeated real requests
+        shell: bash
+        env:
+          SITE_URL: https://jiahao.versecraft.cn
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in $(seq 1 120); do
+            code=$(curl --silent --show-error --location --max-time 20 \
+              --output /tmp/health.json --write-out '%{http_code}' "${SITE_URL}/healthz" || true)
+            echo "health ${attempt}/120 HTTP ${code}: $(cat /tmp/health.json 2>/dev/null || true)"
+            if [ "${code}" = 200 ] && jq -e '.status == "ok" and .quoteServiceVersion == 3' /tmp/health.json >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+          test "${ready}" = true
+
+          probe() {
+            local index="$1"
+            local payload="$2"
+            local original="$3"
+            local code
+            code=$(curl --silent --show-error --location --max-time 55 \
+              --request POST --header 'Content-Type: application/json' \
+              --data "${payload}" --output "/tmp/quote-${index}.json" --write-out '%{http_code}' \
+              "${SITE_URL}/api/quote")
+            echo "quote ${index} HTTP ${code}: $(cat "/tmp/quote-${index}.json")"
+            test "${code}" = 200
+            jq -e --arg original "${original}" \
+              '.source == "云端文字大模型" and .serviceVersion == 3 and (.output | type == "string" and length > 1) and .output != $original' \
+              "/tmp/quote-${index}.json" >/dev/null
+          }
+
+          hao='{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}'
+          probe 1 "${hao}" '今天有点累。'
+          probe 2 "${hao}" '今天有点累。'
+          probe 3 "${hao}" '今天有点累。'
+          probe 4 '{"input":"项目终于做完了。","mode":"hao","level":"自在极意豪","style":"朋友圈"}' '项目终于做完了。'
+          probe 5 '{"input":"我也没说什么，只是你们可能理解不了。","mode":"dehao","level":"豪气冲天","style":"高冷"}' '我也没说什么，只是你们可能理解不了。'
+          probe 6 '{"input":"这个底层逻辑懂的都懂。","mode":"dehao","level":"豪气冲天","style":"高冷"}' '这个底层逻辑懂的都懂。'
