@@ -22,7 +22,7 @@ jobs:
       url: ${{ inputs.production_url || vars.PRODUCTION_URL }}
     env:
       PRODUCTION_URL: ${{ inputs.production_url || vars.PRODUCTION_URL }}
-      EXPECTED_QUOTE_SERVICE_VERSION: '2'
+      EXPECTED_QUOTE_SERVICE_VERSION: '3'
     steps:
       - name: Validate production URL
         shell: bash
