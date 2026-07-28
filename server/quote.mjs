@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { calculateEstimatedCost } from './observability.mjs';
 
-export const QUOTE_SERVICE_VERSION = 2;
+export const QUOTE_SERVICE_VERSION = 3;
 
 const LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
 const STYLES = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
@@ -146,7 +146,11 @@ export function parseQuoteModelResponse(data, payload) {
   const choice = data?.choices?.[0] || {};
   const message = choice.message || {};
   const candidate = normalizeModelText(message.content) || normalizeModelText(choice.text);
-  if (!candidate) throw new Error('大模型返回内容为空');
+  if (!candidate) {
+    const finishReason = cleanText(choice.finish_reason, 'unknown', 30);
+    const reasoningPresent = Boolean(normalizeModelText(message.reasoning_content));
+    throw new Error(`大模型未返回最终内容（finish_reason=${finishReason}，reasoning=${reasoningPresent ? 'present' : 'absent'}）`);
+  }
 
   let rawOutput;
   try {
@@ -192,8 +196,10 @@ async function requestAttempt(fetchImpl, provider, payload, attempt) {
           : `任务：${payload.mode}\n豪气等级：${payload.level}\n风格：${payload.style}\n原句：${payload.input}\n上一次结果不可用，请只输出与原句明显不同的最终改写句子。`,
       },
     ],
+    thinking: { type: 'disabled' },
+    stream: false,
     temperature: jsonMode ? (payload.mode === 'hao' ? 0.82 : 0.35) : (payload.mode === 'hao' ? 0.68 : 0.25),
-    max_tokens: 256,
+    max_tokens: 512,
     ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
   };
 
