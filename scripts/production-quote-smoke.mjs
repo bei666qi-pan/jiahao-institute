@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 
 const SITE_URL = `${(process.env.PRODUCTION_URL || 'https://jiahao.versecraft.cn').replace(/\/$/, '')}/`;
 const INPUT = '我今天通过了最终测试，准备发布。';
+const EXPECTED_SOURCE = '云端文字大模型';
 
 let browser;
 try {
@@ -33,7 +34,9 @@ try {
   const body = await response.json();
   const generated = typeof body.output === 'string' ? body.output.trim() : '';
   if (!response.ok()) throw new Error(`语录接口返回 HTTP ${response.status()}: ${JSON.stringify(body)}`);
+  if (body.source !== EXPECTED_SOURCE) throw new Error(`语录接口来源异常: ${JSON.stringify(body)}`);
   if (generated.length < 2) throw new Error(`语录接口返回无效结果: ${JSON.stringify(body)}`);
+  if (generated === INPUT) throw new Error('豪化结果原样返回了输入');
   if (generated === before) throw new Error('生成后输出未发生变化');
 
   await output.waitFor({ state: 'visible', timeout: 10_000 });
@@ -45,7 +48,7 @@ try {
   await page.getByText('云端分析已完成').waitFor({ state: 'visible', timeout: 10_000 });
 
   if (pageErrors.length) throw new Error(`页面脚本错误: ${pageErrors.join(' | ')}`);
-  console.log(`生产语录全链路通过：HTTP ${response.status()}，来源 ${body.source || '未知'}，输出 ${generated}`);
+  console.log(`生产语录全链路通过：HTTP ${response.status()}，来源 ${body.source}，输出 ${generated}`);
 } catch (error) {
   console.error(error instanceof Error ? error.stack || error.message : error);
   process.exitCode = 1;
