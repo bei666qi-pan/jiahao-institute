@@ -5,23 +5,26 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 2,
-  reporter: 'line',
-  timeout: 30000,
+  workers: process.env.CI ? 2 : undefined,
+  reporter: process.env.CI
+    ? [['line'], ['html', { outputFolder: 'playwright-report', open: 'never' }]]
+    : [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  timeout: 30_000,
+  expect: { timeout: 8_000 },
   use: {
-    baseURL: 'http://localhost:8080',
-    trace: 'on-first-retry',
+    baseURL: 'http://127.0.0.1:8080',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
   projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
     command: 'node server.mjs',
-    url: 'http://localhost:8080/healthz',
-    reuseExistingServer: true,
-    timeout: 10000,
+    url: 'http://127.0.0.1:8080/healthz',
+    reuseExistingServer: !process.env.CI,
+    timeout: 20_000,
   },
 });
