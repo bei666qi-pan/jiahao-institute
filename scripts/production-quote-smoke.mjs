@@ -3,7 +3,7 @@ import { chromium } from '@playwright/test';
 const SITE_URL = `${(process.env.PRODUCTION_URL || 'https://jiahao.versecraft.cn').replace(/\/$/, '')}/`;
 const INPUT = '我今天通过了最终测试，准备发布。';
 const EXPECTED_SOURCE = '云端文字大模型';
-const EXPECTED_SERVICE_VERSION = 2;
+const EXPECTED_SERVICE_VERSION = 3;
 
 let browser;
 try {

@@ -21,6 +21,10 @@ function jsonResponse(body, status = 200) {
   });
 }
 
+test('quote service exposes the current deployment version', () => {
+  assert.equal(QUOTE_SERVICE_VERSION, 3);
+});
+
 test('normalizeQuotePayload validates and normalizes quote options', () => {
   assert.deepEqual(normalizeQuotePayload({
     input: '  今天有点累。  ',
@@ -67,11 +71,20 @@ test('parseQuoteModelResponse rejects unchanged output before display truncation
   }, normalizeQuotePayload({ input: '今天有点累。', mode: 'hao' })), /未完成改写/);
 });
 
-test('parseQuoteModelResponse does not expose reasoning-only content', () => {
+test('parseQuoteModelResponse never exposes reasoning-only content', () => {
   const payload = normalizeQuotePayload({ input: '今天有点累。', mode: 'hao' });
   assert.throws(() => parseQuoteModelResponse({
-    choices: [{ message: { content: '', reasoning_content: '内部推理过程' } }],
-  }, payload), /返回内容为空/);
+    choices: [{
+      finish_reason: 'length',
+      message: { content: '', reasoning_content: '内部推理过程不得展示' },
+    }],
+  }, payload), (error) => {
+    assert.match(error.message, /未返回最终内容/);
+    assert.match(error.message, /finish_reason=length/);
+    assert.match(error.message, /reasoning=present/);
+    assert.doesNotMatch(error.message, /内部推理过程/);
+    return true;
+  });
 });
 
 test('requestQuoteModel retries with a plain-text protocol when response_format is rejected', async () => {
@@ -98,6 +111,12 @@ test('requestQuoteModel retries with a plain-text protocol when response_format 
   assert.equal(requests.length, 2);
   assert.deepEqual(requests[0].response_format, { type: 'json_object' });
   assert.equal('response_format' in requests[1], false);
+  assert.deepEqual(requests[0].thinking, { type: 'disabled' });
+  assert.deepEqual(requests[1].thinking, { type: 'disabled' });
+  assert.equal(requests[0].stream, false);
+  assert.equal(requests[1].stream, false);
+  assert.equal(requests[0].max_tokens, 512);
+  assert.equal(requests[1].max_tokens, 512);
   assert.match(requests[1].messages[0].content, /不要 JSON/);
   assert.equal(result.data.output, '不是累，只是今天的风有点重。');
   assert.equal(result.data.source, '云端文字大模型');
@@ -106,8 +125,10 @@ test('requestQuoteModel retries with a plain-text protocol when response_format 
 
 test('requestQuoteModel accepts a provider plain-text response without a needless retry', async () => {
   let calls = 0;
-  const fetchImpl = async () => {
+  let requestBody;
+  const fetchImpl = async (_url, options) => {
     calls += 1;
+    requestBody = JSON.parse(options.body);
     return jsonResponse({
       choices: [{ message: { content: '累只是身体的意见，我还没有同意。' } }],
       usage: { prompt_tokens: 12, completion_tokens: 8 },
@@ -116,6 +137,7 @@ test('requestQuoteModel accepts a provider plain-text response without a needles
 
   const result = await requestQuoteModel({ input: '今天有点累。', mode: 'hao' }, { env, fetchImpl });
   assert.equal(calls, 1);
+  assert.deepEqual(requestBody.thinking, { type: 'disabled' });
   assert.equal(result.data.output, '累只是身体的意见，我还没有同意。');
 });
 
