@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeDeltaSeconds, calculateEstimatedCost, decodeCursor, encodeCursor, getRangeConfig, parseUsage } from '../server/observability.mjs';
+import { activeDeltaSeconds, calculateEstimatedCost, decodeCursor, encodeCursor, getRangeConfig, Observability, parseUsage } from '../server/observability.mjs';
 import { safePasswordEqual, sameOrigin } from '../server/admin-auth.mjs';
 
 test('provider usage accepts OpenAI-compatible and cached token fields', () => {
@@ -45,4 +45,38 @@ test('admin password comparison and same-origin check are deterministic', () => 
   assert.equal(safePasswordEqual('wrong', 'correct horse'), false);
   assert.equal(sameOrigin({ headers: { origin: 'https://jiahao.example', host: 'jiahao.example' } }), true);
   assert.equal(sameOrigin({ headers: { origin: 'https://evil.example', host: 'jiahao.example' } }), false);
+});
+
+test('cost analysis keeps usable breakdowns when one aggregation fails', async () => {
+  const observability = new Observability({});
+  let queryIndex = 0;
+  observability.query = async () => {
+    queryIndex += 1;
+    if (queryIndex === 2) throw new Error('provider aggregation failed');
+    return { rows: [{ requests: '2', priced_requests: '1', estimated_cost_micros: '1200' }] };
+  };
+  const result = await observability.costs('7d');
+  assert.equal(result.partial, true);
+  assert.deepEqual(result.unavailableBreakdowns, ['provider']);
+  assert.equal(result.byDay.length, 1);
+  assert.deepEqual(result.byProvider, []);
+  assert.equal(result.byEndpoint.length, 1);
+  assert.ok(result.generatedAt);
+});
+
+test('cost analysis still surfaces a real database outage', async () => {
+  const observability = new Observability({});
+  observability.query = async () => { throw new Error('database offline'); };
+  await assert.rejects(() => observability.costs('7d'), /database offline/);
+});
+
+test('cost analysis rejects endpoint-only data that cannot produce a truthful summary', async () => {
+  const observability = new Observability({});
+  let queryIndex = 0;
+  observability.query = async () => {
+    queryIndex += 1;
+    if (queryIndex < 3) throw new Error('summary aggregation failed');
+    return { rows: [{ endpoint: '/api/analyze', requests: '2', estimated_cost_micros: '1200' }] };
+  };
+  await assert.rejects(() => observability.costs('7d'), /summary aggregation failed/);
 });
