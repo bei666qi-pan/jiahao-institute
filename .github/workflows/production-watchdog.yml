@@ -1,0 +1,122 @@
+name: Production Watchdog
+
+on:
+  schedule:
+    - cron: '3,13,23,33,43,53 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jiahao-production-watchdog
+  cancel-in-progress: false
+
+jobs:
+  monitor-and-recover:
+    name: External health guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: production
+    env:
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+      COOLIFY_API_KEY: ${{ secrets.COOLIFY_API_KEY }}
+      COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      VOLC_AK: ${{ secrets.VOLC_AK }}
+      VOLC_SK: ${{ secrets.VOLC_SK }}
+      VOLC_REGION: ${{ vars.VOLC_REGION }}
+      VOLC_INSTANCE_ID: ${{ vars.VOLC_INSTANCE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate watchdog configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(PRODUCTION_URL COOLIFY_BASE_URL COOLIFY_API_KEY COOLIFY_APP_UUID VOLC_AK VOLC_SK VOLC_REGION VOLC_INSTANCE_ID)
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing watchdog configuration: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Probe production repeatedly
+        id: production
+        shell: bash
+        run: |
+          set -uo pipefail
+          healthy=false
+          for attempt in 1 2 3; do
+            code=$(curl --silent --show-error --location --connect-timeout 8 --max-time 20 \
+              --output /tmp/health.json --write-out '%{http_code}' \
+              "${PRODUCTION_URL%/}/healthz" || true)
+            if [ "${code}" = 200 ] && jq -e \
+              '.status == "ok" and .textModelConfigured == true and .observability.databaseHealthy == true' \
+              /tmp/health.json >/dev/null 2>&1; then
+              healthy=true
+              break
+            fi
+            echo "Production probe ${attempt}/3 failed with HTTP ${code}."
+            sleep 20
+          done
+          echo "healthy=${healthy}" >> "${GITHUB_OUTPUT}"
+
+      - name: Probe Coolify control plane
+        if: steps.production.outputs.healthy != 'true'
+        id: coolify
+        shell: bash
+        run: |
+          set -uo pipefail
+          healthy=false
+          for attempt in 1 2 3; do
+            code=$(curl --silent --show-error --location --connect-timeout 8 --max-time 20 \
+              --output /tmp/coolify-health --write-out '%{http_code}' \
+              "${COOLIFY_BASE_URL%/}/api/v1/health" || true)
+            if [ "${code}" = 200 ] && grep -qx 'OK' /tmp/coolify-health; then
+              healthy=true
+              break
+            fi
+            echo "Coolify probe ${attempt}/3 failed with HTTP ${code}."
+            sleep 20
+          done
+          echo "healthy=${healthy}" >> "${GITHUB_OUTPUT}"
+
+      - name: Redeploy application when Coolify is reachable
+        if: steps.production.outputs.healthy != 'true' && steps.coolify.outputs.healthy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl --silent --show-error --fail-with-body \
+            --request POST \
+            --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+            --header 'Accept: application/json' \
+            "${COOLIFY_BASE_URL%/}/api/v1/deploy?uuid=${COOLIFY_APP_UUID}&force=true")
+          deployment_uuid=$(jq -er '.deployments[0].deployment_uuid' <<<"${response}")
+          echo "Application recovery deployment queued: ${deployment_uuid}."
+
+      - name: Reboot ECS when the whole control plane is unreachable
+        if: steps.production.outputs.healthy != 'true' && steps.coolify.outputs.healthy != 'true'
+        run: node scripts/volcengine-ecs-control.mjs reboot
+
+      - name: Verify recovery
+        if: steps.production.outputs.healthy != 'true'
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in $(seq 1 36); do
+            code=$(curl --silent --show-error --location --connect-timeout 8 --max-time 20 \
+              --output /tmp/recovered-health.json --write-out '%{http_code}' \
+              "${PRODUCTION_URL%/}/healthz" || true)
+            if [ "${code}" = 200 ] && jq -e \
+              '.status == "ok" and .textModelConfigured == true and .observability.databaseHealthy == true' \
+              /tmp/recovered-health.json >/dev/null 2>&1; then
+              echo "Production recovered after ${attempt} verification attempts."
+              exit 0
+            fi
+            echo "Recovery verification ${attempt}/36 failed with HTTP ${code}."
+            sleep 10
+          done
+          echo 'Production did not recover before the watchdog timeout.' >&2
+          exit 1
