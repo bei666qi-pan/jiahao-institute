@@ -223,7 +223,7 @@ function roomView() {
       <aside class="social-room-aside" aria-label="房间规则与隐私">
         <h3>房间规则与隐私</h3>
         <ul>
-          <li>本榜单仅限房间成员查看</li>
+          <li>持有邀请链接的好友可查看榜单</li>
           <li>云端可信成绩优先排名</li>
           <li>同类成绩按嘉豪指数排序</li>
           <li>原始素材与私密判词不会公开</li>
@@ -421,7 +421,10 @@ installResultAction();
 window.addEventListener('popstate', () => void syncRoute());
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  if (state.battle) {
+  const shareDialog = document.querySelector('.social-share-backdrop');
+  if (shareDialog) {
+    shareDialog.remove();
+  } else if (state.battle) {
     state.battle = null;
     render();
   } else if (state.open) closeSocial();

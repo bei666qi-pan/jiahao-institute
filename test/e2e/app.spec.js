@@ -176,6 +176,14 @@ test.describe('嘉豪鉴定所全链路', () => {
     await expect(page.getByRole('heading', { name: '404 宿舍豪气榜' })).toBeVisible();
     await expect(page.getByText('宿舍长', { exact: true })).toBeVisible();
     await expect(page.getByText('云端可信', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '邀请好友加入' }).click();
+    const inviteDialog = page.getByRole('dialog', { name: '邀请好友' });
+    await expect(inviteDialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(inviteDialog).toBeHidden();
+    await expect(page.getByRole('heading', { name: '404 宿舍豪气榜' })).toBeVisible();
+    await page.setViewportSize({ width: 768, height: 1024 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);
   });
 
   test('摄像头拒绝与移动端无横向溢出', async ({ page, context }) => {
