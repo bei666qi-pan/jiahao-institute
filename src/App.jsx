@@ -684,8 +684,7 @@ function Scale() {
   return <div className="scale"><div className="scale-head"><strong>豪气刻度</strong><span>普通人</span><span>自在极意豪</span></div><div className="scale-line">{Array.from({ length: 11 }, (_, i) => <i key={i} className={i > 6 ? 'hot' : ''}><b>{i * 10}</b></i>)}</div></div>;
 }
 
-function Home({ onResult, addHistory }) {
-  const [mode, setMode] = useState('photo');
+function Home({ onResult, addHistory, mode, onModeChange }) {
   return (
     <main>
       <section className={`hero ${mode === 'pk' ? 'hero-pk' : ''}`}>
@@ -695,7 +694,7 @@ function Home({ onResult, addHistory }) {
           <p>{mode === 'pk' ? '双方可分别提交照片、聊天或文字，让模型综合裁决豪气高下。' : '自拍或上传一张照片，鉴定你的嘉豪浓度、物种与隐藏天赋。'}</p>
         </div>
         {mode === 'pk' ? <div className="hero-scan pk-preview" aria-hidden="true"><div className="pk-preview-head">对比结果预览</div><div className="pk-preview-portraits"><div><strong>选手 A</strong><span style={{ backgroundImage: `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} /></div><ul>{DIMENSION_META.map(([, label]) => <li key={label}>{label}</li>)}</ul><div><strong>选手 B</strong><span style={{ backgroundImage: `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} /></div></div><p>等待双方豪气样本</p></div> : <div className="hero-scan" style={{ '--hero-image': `url(${ASSET_BASE_URL}/pixel-scan-1cd15197d2fa.jpg)` }} aria-hidden="true"><span>豪气波形<br />锁定中……</span><i /></div>}
-        <AssayForm onResult={onResult} addHistory={addHistory} mode={mode} onModeChange={setMode} />
+        <AssayForm onResult={onResult} addHistory={addHistory} mode={mode} onModeChange={onModeChange} />
         <Scale />
         <div className="document-meta"><span>娱乐档案<br /><b>仅供鉴定娱乐使用</b></span><span className="barcode" /><span>嘉豪鉴定样本<br /><b>请勿过度当真</b></span></div>
       </section>
@@ -1000,6 +999,7 @@ function HistoryModal({ history, onClose, onSelect, onClear }) {
 
 export default function App() {
   const [page, setPage] = useState('quotes');
+  const [assayMode, setAssayMode] = useState('photo');
   const [result, setResult] = useState(null);
   const [posterOpen, setPosterOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1013,7 +1013,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header page={page} onNavigate={navigate} onHistory={() => setHistoryOpen(true)} />
-      {page === 'quotes' ? <QuoteGenerator /> : result ? (result.kind === 'pk' ? <PkResult result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} />) : <Home onResult={setResult} addHistory={add} />}
+      {page === 'quotes' ? <QuoteGenerator /> : result ? (result.kind === 'pk' ? <PkResult result={result} onReset={() => { setAssayMode('pk'); setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} />) : <Home onResult={setResult} addHistory={add} mode={assayMode} onModeChange={setAssayMode} />}
       <footer><strong>嘉豪鉴定所</strong><span>© {year} 嘉豪鉴定开源实验项目</span><span>大模型娱乐生成 · 本站不保存内容 · 不构成任何事实判断</span></footer>
       {posterOpen && <PosterModal result={result} onClose={() => setPosterOpen(false)} />}
       {historyOpen && <HistoryModal history={history} onClose={() => setHistoryOpen(false)} onSelect={(item) => { setPage('assay'); setResult(item); window.scrollTo({ top: 0 }); }} onClear={clear} />}
