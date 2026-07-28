@@ -54,14 +54,6 @@ const EXAMPLES = [
 
 const QUOTE_LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
 const QUOTE_STYLES = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
-const QUOTE_PRESETS = [
-  ['豪气冲天', '高冷'],
-  ['豪气逼人', '深情'],
-  ['自在极意豪', '小众'],
-  ['豪气冲天', '朋友圈'],
-  ['豪气初现', '评论区'],
-];
-
 function Icon({ name, size = 20 }) {
   const paths = {
     arrow: <><path d="M4 12h15"/><path d="m14 5 7 7-7 7"/></>,
@@ -765,26 +757,26 @@ function QuoteGenerator() {
   const [generating, setGenerating] = useState(false);
   const [variation, setVariation] = useState(0);
   const [notice, setNotice] = useState('');
+  const [inputError, setInputError] = useState('');
   const [modelStatus, setModelStatus] = useState(null);
+  const [outputConfig, setOutputConfig] = useState({ mode: 'hao', level: '豪气冲天', style: '高冷' });
 
   const changeMode = (nextMode) => {
     setMode(nextMode);
     setNotice('');
-    setModelStatus(null);
-    if (nextMode === 'dehao') {
-      setInput('我也没说什么，只是你们可能理解不了。');
-      setOutput('这件事比较复杂，我暂时不想解释。');
-    } else {
-      setInput('今天有点累。');
-      setOutput('不是累，只是有些事情，说了你们也不一定懂。');
-    }
+    setInputError('');
   };
 
   const generate = async (nextVariation = variation + 1) => {
-    if (input.trim().length < 2) return setNotice('先输入一句话，嘉豪频道才能接通信号。');
+    if (input.trim().length < 2) {
+      setInputError('请至少输入两个字，再生成语录。');
+      return undefined;
+    }
+    setInputError('');
     setGenerating(true);
     setNotice('');
     setVariation(nextVariation);
+    const requestedConfig = { mode, level, style };
     const startedAt = Date.now();
     let nextOutput;
     let nextModelStatus;
@@ -797,7 +789,12 @@ function QuoteGenerator() {
       nextModelStatus = { source: '豪之算法', fallbackNotice: MODEL_FALLBACK_NOTICE };
     }
     const delay = Math.max(0, 620 - (Date.now() - startedAt));
-    window.setTimeout(() => { setOutput(nextOutput); setModelStatus(nextModelStatus); setGenerating(false); }, delay);
+    window.setTimeout(() => {
+      setOutput(nextOutput);
+      setOutputConfig(requestedConfig);
+      setModelStatus(nextModelStatus);
+      setGenerating(false);
+    }, delay);
     return undefined;
   };
 
@@ -817,12 +814,16 @@ function QuoteGenerator() {
         <p>输入一句话，选择豪气与风格，生成一条刚好值得截图的嘉豪语录。</p>
       </section>
       <section className="quote-workspace" aria-label="嘉豪语录生成工作台">
-        <div className="quote-editor">
+        <section className="quote-editor" aria-label="语录设置">
           <div className="quote-field-head"><h2>原句</h2><span>{input.length} / 300</span></div>
-          <textarea aria-label="要转换的原句" maxLength={300} value={input} onChange={(event) => setInput(event.target.value)} />
-          <div className="quote-mode" role="tablist" aria-label="转换方向">
-            <button role="tab" aria-selected={mode === 'hao'} className={mode === 'hao' ? 'active' : ''} onClick={() => changeMode('hao')}><Icon name="spark" />豪化</button>
-            <button role="tab" aria-selected={mode === 'dehao'} className={mode === 'dehao' ? 'active' : ''} onClick={() => changeMode('dehao')}>一键说人话</button>
+          <textarea aria-label="要转换的原句" aria-invalid={Boolean(inputError)} aria-describedby={inputError ? 'quote-input-error' : undefined} maxLength={300} value={input} onChange={(event) => { setInput(event.target.value); setInputError(''); }} />
+          {inputError ? <p id="quote-input-error" className="form-error quote-input-error" role="alert">{inputError}</p> : null}
+          <div className="quote-mode-row">
+            <span>转换方式</span>
+            <div className="quote-mode" role="group" aria-label="转换方向">
+              <button type="button" aria-pressed={mode === 'hao'} className={mode === 'hao' ? 'active' : ''} onClick={() => changeMode('hao')}>豪化</button>
+              <button type="button" aria-pressed={mode === 'dehao'} className={mode === 'dehao' ? 'active' : ''} onClick={() => changeMode('dehao')}>一键说人话</button>
+            </div>
           </div>
           <fieldset className="quote-levels" disabled={mode === 'dehao'}>
             <legend>豪气等级</legend>
@@ -833,25 +834,20 @@ function QuoteGenerator() {
             <div>{QUOTE_STYLES.map((item) => <button type="button" key={item} className={style === item ? 'active' : ''} aria-pressed={style === item} onClick={() => setStyle(item)}>{item}</button>)}</div>
           </fieldset>
           <button className={`primary-action quote-generate ${generating ? 'is-loading' : ''}`} onClick={() => generate()} disabled={generating}>{generating ? '豪气正在汇聚……' : <><Icon name="spark" />{mode === 'dehao' ? '一键把嘉豪说人话' : '生成嘉豪语录'}</>}</button>
-        </div>
-        <div className="quote-output" aria-live="polite">
-          <header><h2>本次输出</h2><span>{mode === 'dehao' ? '去豪化 · 正常表达' : `${level} · ${style}嘉豪`}</span></header>
+        </section>
+        <section className="quote-output" aria-label="生成结果">
+          <header><h2>生成结果</h2><span>{outputConfig.mode === 'dehao' ? '去豪化 · 正常表达' : `${outputConfig.level} · ${outputConfig.style}`}</span></header>
           {modelStatus ? <ModelSourceNotice source={modelStatus.source} fallbackNotice={modelStatus.fallbackNotice} compact /> : null}
-          <blockquote>{output}</blockquote>
+          <blockquote aria-live="polite">{output}</blockquote>
           <div className="quote-actions">
             <button onClick={copy}><Icon name="copy" size={18} />复制语录</button>
-            <button onClick={() => { downloadQuoteCard(output, level, style); setNotice('卡片已生成；如未自动保存，请在浏览器菜单中下载图片。'); }}><Icon name="download" size={18} />保存卡片</button>
+            <button onClick={() => { downloadQuoteCard(output, outputConfig.level, outputConfig.style); setNotice('卡片已生成；如未自动保存，请在浏览器菜单中下载图片。'); }}><Icon name="download" size={18} />保存卡片</button>
             <button onClick={() => generate(variation + 1)}><Icon name="reset" size={18} />换一个</button>
-          </div>
-          <div className="share-card-preview" aria-label="分享卡片预览">
-            <span>分享卡片预览</span>
-            <div><i aria-hidden="true">“</i><p>{output}</p><strong>嘉豪语录生成器</strong></div>
           </div>
           <p className="quote-privacy"><Icon name="lock" size={14} /> 内容仅用于本次生成，不公开原句</p>
           {notice ? <p className="quote-notice" role="status">{notice}</p> : null}
-        </div>
+        </section>
       </section>
-      <section className="quote-presets" aria-label="最近使用预设"><strong>最近使用预设</strong>{QUOTE_PRESETS.map(([presetLevel, presetStyle]) => <button key={`${presetLevel}-${presetStyle}`} onClick={() => { setMode('hao'); setLevel(presetLevel); setStyle(presetStyle); }}>{presetLevel} · {presetStyle}</button>)}</section>
     </main>
   );
 }

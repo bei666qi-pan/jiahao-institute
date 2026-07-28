@@ -24,7 +24,7 @@ function jsonResponse(body, status = 200) {
 }
 
 test('quote service exposes the current deployment version', () => {
-  assert.equal(QUOTE_SERVICE_VERSION, 4);
+  assert.equal(QUOTE_SERVICE_VERSION, 5);
 });
 
 test('normalizeQuotePayload validates and normalizes quote options', () => {
@@ -69,6 +69,22 @@ test('short dramatic fragments must be visibly expanded and retain their core im
 
   const calibrated = makeCalibratedHaoQuote(payload);
   assert.equal(calibrated, '凡人之血，也配让我停下脚步？');
+});
+
+test('calibrated short-input fallback is valid for every level and style', () => {
+  const inputs = ['累了', '凡人之血', '今天有点累了啊'];
+  const levels = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
+  const styles = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
+
+  for (const input of inputs) {
+    for (const level of levels) {
+      for (const style of styles) {
+        const payload = normalizeQuotePayload({ input, mode: 'hao', level, style });
+        const output = makeCalibratedHaoQuote(payload);
+        assert.doesNotThrow(() => assertQuoteQuality(output, payload), `${input} / ${level} / ${style}`);
+      }
+    }
+  }
 });
 
 test('parseQuoteModelResponse rejects unchanged output before display truncation', () => {
@@ -188,6 +204,25 @@ test('short inputs receive a calibrated guaranteed rewrite after two weak model 
     completion_tokens: 8,
     total_tokens: 24,
   });
+});
+
+test('two-character input still returns a calibrated rewrite for the formerly failing combination', async () => {
+  const fetchImpl = async () => jsonResponse({
+    choices: [{ message: { content: '{"output":"累了。"}' } }],
+  });
+
+  const result = await requestQuoteModel({
+    input: '累了',
+    mode: 'hao',
+    level: '豪气冲天',
+    style: '高冷',
+  }, { env, fetchImpl });
+
+  assert.equal(result.data.calibrated, true);
+  assert.equal(result.data.serviceVersion, QUOTE_SERVICE_VERSION);
+  assert.doesNotThrow(() => assertQuoteQuality(result.data.output, normalizeQuotePayload({
+    input: '累了', mode: 'hao', level: '豪气冲天', style: '高冷',
+  })));
 });
 
 test('requestQuoteModel accepts a provider plain-text response without a needless retry', async () => {
