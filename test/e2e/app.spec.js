@@ -109,7 +109,7 @@ test.describe('嘉豪鉴定所全链路', () => {
     await enterAssay(page);
     await page.getByRole('button', { name: '图鉴', exact: true }).click();
     await expect(page.getByRole('heading', { name: '嘉豪物种图鉴' })).toBeVisible();
-    await page.getByRole('button', { name: '查看计算机嘉豪' }).click();
+    await page.getByRole('listitem', { name: '查看计算机嘉豪' }).click();
     await expect(page.getByRole('heading', { name: '计算机嘉豪' })).toBeVisible();
     await page.getByRole('button', { name: /我的鉴定/ }).click();
     await expect(page.getByRole('dialog', { name: '鉴定记录' })).toContainText('还没有鉴定记录');
@@ -194,7 +194,7 @@ test.describe('嘉豪鉴定所全链路', () => {
     await page.getByRole('button', { name: /换一个/ }).click();
     await expect(page.locator('.quote-output blockquote')).not.toBeEmpty();
     await page.getByRole('tab', { name: '一键说人话' }).click();
-    await expect(page.locator('fieldset.quote-levels')).toBeDisabled();
+    await expect(page.getByRole('group', { name: '豪气等级' }).getByRole('button', { name: '豪气冲天', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: /一键把嘉豪说人话/ }).click();
     await expect(page.locator('.quote-output blockquote')).toHaveText('简单来说，我今天有点累。');
     await page.unroute('**/api/quote');
