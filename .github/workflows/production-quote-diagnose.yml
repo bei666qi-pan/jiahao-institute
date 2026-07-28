@@ -24,27 +24,25 @@ jobs:
             local method="$2"
             local path="$3"
             local data="${4:-}"
-            local body="/tmp/${name}.json"
-            local headers="/tmp/${name}.headers"
+            local body="/tmp/${name}.body"
             local code
             if [ "$method" = POST ]; then
               code=$(curl --silent --show-error --location --max-time 65 \
                 --request POST --header 'Content-Type: application/json' \
-                --data "$data" --dump-header "$headers" --output "$body" \
-                --write-out '%{http_code}' "${SITE_URL}${path}" || true)
+                --data "$data" --output "$body" --write-out '%{http_code}' \
+                "${SITE_URL}${path}" || true)
             else
               code=$(curl --silent --show-error --location --max-time 25 \
-                --dump-header "$headers" --output "$body" \
-                --write-out '%{http_code}' "${SITE_URL}${path}" || true)
+                --output "$body" --write-out '%{http_code}' \
+                "${SITE_URL}${path}" || true)
             fi
+            printf '%s' "$code" > "/tmp/${name}.status"
             echo "===== ${name} HTTP ${code} ====="
-            cat "$headers" 2>/dev/null || true
-            cat "$body" 2>/dev/null || true
+            head -c 2000 "$body" 2>/dev/null || true
             echo
           }
 
           request health GET /healthz
-          request homepage GET /
           request hao POST /api/quote '{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}'
           request hao_second POST /api/quote '{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}'
           request dehao POST /api/quote '{"input":"我也没说什么，只是你们可能理解不了。","mode":"dehao","level":"豪气冲天","style":"高冷"}'
@@ -52,7 +50,7 @@ jobs:
           request invalid_json POST /api/quote '{invalid'
 
           echo '===== VERSION FINGERPRINT ====='
-          one_char_code=$(awk 'NR==1 {print $2}' /tmp/one_char.headers 2>/dev/null || true)
-          invalid_code=$(awk 'NR==1 {print $2}' /tmp/invalid_json.headers 2>/dev/null || true)
-          echo "one_char_status=${one_char_code:-unknown} (new route expects 400; old route generally returns 503)"
-          echo "invalid_json_status=${invalid_code:-unknown} (new route expects 400)"
+          echo "one_char_status=$(cat /tmp/one_char.status 2>/dev/null || echo unknown) (new route expects 400; old route generally returns 503)"
+          echo "invalid_json_status=$(cat /tmp/invalid_json.status 2>/dev/null || echo unknown) (new route expects 400)"
+          echo "hao_status=$(cat /tmp/hao.status 2>/dev/null || echo unknown)"
+          echo "dehao_status=$(cat /tmp/dehao.status 2>/dev/null || echo unknown)"
