@@ -64,7 +64,7 @@ jobs:
     name: Mirror and deploy
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
@@ -78,6 +78,7 @@ jobs:
       COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
       COOLIFY_API_KEY: ${{ secrets.COOLIFY_API_KEY }}
       COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
       TARGET_SHA: ${{ github.sha }}
     steps:
       - name: Check required production configuration
@@ -86,7 +87,7 @@ jobs:
           set -euo pipefail
           required=(
             GITEE_TOKEN GITEE_USER GITEE_REPOSITORY
-            COOLIFY_BASE_URL COOLIFY_API_KEY COOLIFY_APP_UUID TARGET_SHA
+            COOLIFY_BASE_URL COOLIFY_API_KEY COOLIFY_APP_UUID PRODUCTION_URL TARGET_SHA
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -119,6 +120,12 @@ jobs:
             echo "Skipping superseded release ${TARGET_SHA}; current main is ${latest_sha}."
             exit 0
           fi
+          expected_version=$(sed -n 's/^export const QUOTE_SERVICE_VERSION = \([0-9][0-9]*\);/\1/p' server/quote.mjs | head -n 1)
+          if [ -z "${expected_version}" ]; then
+            echo 'Unable to resolve QUOTE_SERVICE_VERSION.' >&2
+            exit 1
+          fi
+          echo "expected_quote_service_version=${expected_version}" >> "${GITHUB_OUTPUT}"
           echo 'deployed=pending' >> "${GITHUB_OUTPUT}"
 
       - name: Mirror release to Gitee master
@@ -143,6 +150,41 @@ jobs:
           fi
           echo "Gitee master verified at ${mirrored_sha}."
 
+      - name: Pin Coolify application to release commit
+        if: steps.release.outputs.deployed == 'pending'
+        shell: bash
+        run: |
+          set -euo pipefail
+          application=$(curl --silent --show-error --fail \
+            --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+            --header 'Accept: application/json' \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}")
+          current_repository=$(jq -r '.git_repository // "unknown"' <<<"${application}")
+          current_branch=$(jq -r '.git_branch // "unknown"' <<<"${application}")
+          current_commit=$(jq -r '.git_commit_sha // ""' <<<"${application}")
+          echo "Coolify source before pin: ${current_repository} ${current_branch} ${current_commit:-unpinned}."
+
+          payload=$(jq -nc --arg sha "${TARGET_SHA}" '{git_commit_sha:$sha}')
+          curl --silent --show-error --fail-with-body \
+            --request PATCH \
+            --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --data "${payload}" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}" >/tmp/coolify-pin.json
+          echo "Coolify pin response: $(cat /tmp/coolify-pin.json)"
+
+          pinned=$(curl --silent --show-error --fail \
+            --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+            --header 'Accept: application/json' \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}")
+          pinned_commit=$(jq -r '.git_commit_sha // ""' <<<"${pinned}")
+          if [ "${pinned_commit}" != "${TARGET_SHA}" ]; then
+            echo "Coolify commit pin mismatch: expected ${TARGET_SHA}, got ${pinned_commit:-missing}." >&2
+            exit 1
+          fi
+          echo "Coolify application pinned to ${pinned_commit}."
+
       - name: Trigger Coolify deployment
         if: steps.release.outputs.deployed == 'pending'
         id: coolify
@@ -163,6 +205,7 @@ jobs:
         shell: bash
         env:
           DEPLOYMENT_UUID: ${{ steps.coolify.outputs.deployment_uuid }}
+          EXPECTED_QUOTE_SERVICE_VERSION: ${{ steps.release.outputs.expected_quote_service_version }}
         run: |
           set -euo pipefail
           deployment_finished=false
@@ -173,7 +216,7 @@ jobs:
               "${COOLIFY_BASE_URL%/}/api/v1/deployments/${DEPLOYMENT_UUID}")
             status=$(jq -r '.status // "unknown"' <<<"${deployment}")
             commit=$(jq -r '.commit // ""' <<<"${deployment}")
-            echo "Deployment ${DEPLOYMENT_UUID}: ${status} (${attempt}/90)."
+            echo "Deployment ${DEPLOYMENT_UUID}: ${status} commit=${commit:-unknown} (${attempt}/90)."
             case "${status}" in
               finished)
                 if [ "${commit}" != "${TARGET_SHA}" ]; then
@@ -195,23 +238,52 @@ jobs:
             exit 1
           fi
 
+          application_healthy=false
           for attempt in $(seq 1 30); do
             application=$(curl --silent --show-error --fail \
               --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
               --header 'Accept: application/json' \
               "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}")
             app_status=$(jq -r '.status // "unknown"' <<<"${application}")
-            echo "Application status: ${app_status} (${attempt}/30)."
+            app_commit=$(jq -r '.git_commit_sha // ""' <<<"${application}")
+            echo "Application status: ${app_status}, pinned=${app_commit:-missing} (${attempt}/30)."
+            if [ "${app_commit}" != "${TARGET_SHA}" ]; then
+              echo "Coolify application commit drifted to ${app_commit:-missing}; expected ${TARGET_SHA}." >&2
+              exit 1
+            fi
             if [[ "${app_status}" == *healthy* ]]; then
-              exit 0
+              application_healthy=true
+              break
             fi
             if [[ "${app_status}" == exited:* ]]; then
               exit 1
             fi
             sleep 5
           done
-          echo 'Timed out waiting for a healthy application.' >&2
-          exit 1
+          if [ "${application_healthy}" != 'true' ]; then
+            echo 'Timed out waiting for a healthy application.' >&2
+            exit 1
+          fi
+
+          runtime_matches=false
+          for attempt in $(seq 1 36); do
+            health_code=$(curl --silent --show-error --location --ipv4 --http1.1 \
+              --connect-timeout 12 --max-time 30 \
+              --output /tmp/release-health.json --write-out '%{http_code}' \
+              "${PRODUCTION_URL%/}/healthz" || true)
+            echo "Runtime release probe ${attempt}/36 HTTP ${health_code}: $(cat /tmp/release-health.json 2>/dev/null || true)"
+            if [ "${health_code}" = '200' ] \
+              && jq -e --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" \
+                '.status == "ok" and .quoteServiceVersion == $version' /tmp/release-health.json >/dev/null 2>&1; then
+              runtime_matches=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "${runtime_matches}" != 'true' ]; then
+            echo "Production runtime did not expose quote service version ${EXPECTED_QUOTE_SERVICE_VERSION}." >&2
+            exit 1
+          fi
 
       - name: Mark release ready for smoke tests
         if: steps.release.outputs.deployed == 'pending'
