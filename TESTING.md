@@ -73,6 +73,7 @@ test/
 | `npm run test:e2e` | 运行 Playwright E2E 测试（20个） |
 | `npm run test:e2e:ui` | 以 UI 模式运行 E2E 测试 |
 | `npm run test:coverage` | 运行 AI 测试覆盖率分析 |
+| `PRODUCTION_SMOKE=true npx playwright test test/e2e/production-quote.spec.js --project=desktop-chromium` | 对生产站运行真实模型语录矩阵 E2E |
 
 ## 本地测试运行
 

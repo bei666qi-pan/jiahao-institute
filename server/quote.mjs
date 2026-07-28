@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { calculateEstimatedCost } from './observability.mjs';
 
-export const QUOTE_SERVICE_VERSION = 4;
+export const QUOTE_SERVICE_VERSION = 5;
 
 const LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
 const STYLES = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
@@ -219,7 +219,20 @@ export function makeCalibratedHaoQuote(payload) {
     个性签名: `${source}未冷，我便不会低头。`,
     评论区: `${source}罢了，真正经历过的人不会多说。`,
   };
-  const output = variants[payload.style] || highCold[payload.level] || highCold['豪气冲天'];
+  let output = variants[payload.style] || highCold[payload.level] || highCold['豪气冲天'];
+  if (comparable(payload.input).length <= 8 && comparable(output).length < minimumHaoLength(payload)) {
+    const tails = {
+      深情: '有些话留在风里，比说出口更合适。',
+      高冷: '至于答案，从来没必要留给所有人。',
+      小众: '真正看懂的人，自然不会追问。',
+      无意炫耀: '这种程度，我早就不需要特别说明。',
+      战斗: '路还没走完，这点动静不值得我停下。',
+      朋友圈: '路还很长，我不需要向所有人解释。',
+      个性签名: '我不解释，时间自然会替我开口。',
+      评论区: '真正经历过的人，自然不会多说。',
+    };
+    output = `${output.replace(/[。！？!?]+$/, '')}。${tails[payload.style] || tails.高冷}`;
+  }
   assertQuoteQuality(output, payload);
   return output;
 }

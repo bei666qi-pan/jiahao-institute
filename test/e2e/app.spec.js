@@ -131,9 +131,38 @@ test.describe('嘉豪鉴定所全链路', () => {
     await page.getByLabel('要转换的原句').fill('今天有点累');
     await page.getByRole('button', { name: /生成嘉豪语录/ }).click();
     await expect(page.locator('.quote-output blockquote')).toHaveText('不是累，只是有些路，不需要所有人理解。');
-    await page.getByRole('tab', { name: '一键说人话' }).click();
+    await page.getByRole('button', { name: '一键说人话', exact: true }).click();
     await page.getByRole('button', { name: /一键把嘉豪说人话/ }).click();
     await expect(page.locator('.quote-output blockquote')).toHaveText('简单来说，我今天有点累。');
+  });
+
+  test('豪化与说人话只切换模式，不改写输入或当前输出', async ({ page }) => {
+    let quoteRequests = 0;
+    page.on('request', request => {
+      if (request.url().endsWith('/api/quote')) quoteRequests += 1;
+    });
+
+    const input = page.getByLabel('要转换的原句');
+    const output = page.locator('.quote-output blockquote');
+    const outputMeta = page.locator('.quote-output > header span');
+    await input.fill('请保留这句话');
+    await page.getByRole('button', { name: '生成嘉豪语录', exact: true }).click();
+    await expect(page.getByText('云端分析已完成')).toBeVisible();
+    quoteRequests = 0;
+    const beforeOutput = await output.textContent();
+    const beforeMeta = await outputMeta.textContent();
+
+    await page.getByRole('button', { name: '一键说人话', exact: true }).click();
+    await expect(input).toHaveValue('请保留这句话');
+    await expect(output).toHaveText(beforeOutput || '');
+    await expect(outputMeta).toHaveText(beforeMeta || '');
+    await expect(page.getByText('云端分析已完成')).toBeVisible();
+    await expect(page.getByRole('button', { name: '一键说人话', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByRole('button', { name: '豪化', exact: true }).click();
+    await expect(input).toHaveValue('请保留这句话');
+    await expect(output).toHaveText(beforeOutput || '');
+    expect(quoteRequests).toBe(0);
   });
 
   test('好友榜创建与邀请房间落地', async ({ page }) => {
