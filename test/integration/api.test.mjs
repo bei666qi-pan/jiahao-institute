@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 const originalEnv = { ...process.env };
 
 function setupTestEnv() {
-  delete process.env.DEEPSEEK_API_KEY;
-  delete process.env.ARK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = "";
+  process.env.ARK_API_KEY = "";
   delete process.env.DATABASE_URL;
   delete process.env.ADMIN_PASSWORD;
   process.env.PORT = '0';
