@@ -1,0 +1,185 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows: [Full-chain E2E]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: jiahao-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Mirror and deploy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    outputs:
+      deployed: ${{ steps.mark-release.outputs.deployed || steps.release.outputs.deployed }}
+      target_sha: ${{ steps.release.outputs.target_sha }}
+    env:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      GITEE_USER: ${{ vars.GITEE_USER }}
+      GITEE_REPOSITORY: ${{ vars.GITEE_REPOSITORY }}
+      COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+      COOLIFY_API_KEY: ${{ secrets.COOLIFY_API_KEY }}
+      COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      TARGET_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check required production configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            GITEE_TOKEN GITEE_USER GITEE_REPOSITORY
+            COOLIFY_BASE_URL COOLIFY_API_KEY COOLIFY_APP_UUID TARGET_SHA
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing production configuration: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Reject superseded release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'deployed=false' >> "${GITHUB_OUTPUT}"
+          echo "target_sha=${TARGET_SHA}" >> "${GITHUB_OUTPUT}"
+          git fetch --quiet origin main
+          latest_sha=$(git rev-parse origin/main)
+          checked_out_sha=$(git rev-parse HEAD)
+          if [ "${checked_out_sha}" != "${TARGET_SHA}" ]; then
+            echo "Checked-out SHA ${checked_out_sha} does not match target ${TARGET_SHA}." >&2
+            exit 1
+          fi
+          if [ "${TARGET_SHA}" != "${latest_sha}" ]; then
+            echo "Skipping superseded release ${TARGET_SHA}; current main is ${latest_sha}."
+            exit 0
+          fi
+          echo 'deployed=pending' >> "${GITHUB_OUTPUT}"
+
+      - name: Mirror release to Gitee master
+        if: steps.release.outputs.deployed == 'pending'
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository_url="https://gitee.com/${GITEE_REPOSITORY}.git"
+          before_sha=$(git ls-remote "${repository_url}" refs/heads/master | awk '{print $1}')
+          if [ "${before_sha}" = "${TARGET_SHA}" ]; then
+            echo "Gitee master already points to ${TARGET_SHA}."
+          else
+            basic_auth=$(printf '%s:%s' "${GITEE_USER}" "${GITEE_TOKEN}" | base64 | tr -d '\n')
+            echo "::add-mask::${basic_auth}"
+            git -c http.https://gitee.com/.extraheader="AUTHORIZATION: Basic ${basic_auth}" \
+              push "${repository_url}" "${TARGET_SHA}:refs/heads/master"
+          fi
+          mirrored_sha=$(git ls-remote "${repository_url}" refs/heads/master | awk '{print $1}')
+          if [ "${mirrored_sha}" != "${TARGET_SHA}" ]; then
+            echo "Gitee mirror mismatch: expected ${TARGET_SHA}, got ${mirrored_sha:-missing}." >&2
+            exit 1
+          fi
+          echo "Gitee master verified at ${mirrored_sha}."
+
+      - name: Trigger Coolify deployment
+        if: steps.release.outputs.deployed == 'pending'
+        id: coolify
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl --silent --show-error --fail-with-body \
+            --request POST \
+            --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+            --header 'Accept: application/json' \
+            "${COOLIFY_BASE_URL%/}/api/v1/deploy?uuid=${COOLIFY_APP_UUID}&force=true")
+          deployment_uuid=$(jq -er '.deployments[0].deployment_uuid' <<<"${response}")
+          echo "deployment_uuid=${deployment_uuid}" >> "${GITHUB_OUTPUT}"
+          echo "Coolify deployment queued: ${deployment_uuid}."
+
+      - name: Wait for matching healthy deployment
+        if: steps.release.outputs.deployed == 'pending'
+        shell: bash
+        env:
+          DEPLOYMENT_UUID: ${{ steps.coolify.outputs.deployment_uuid }}
+        run: |
+          set -euo pipefail
+          deployment_finished=false
+          for attempt in $(seq 1 90); do
+            deployment=$(curl --silent --show-error --fail \
+              --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+              --header 'Accept: application/json' \
+              "${COOLIFY_BASE_URL%/}/api/v1/deployments/${DEPLOYMENT_UUID}")
+            status=$(jq -r '.status // "unknown"' <<<"${deployment}")
+            commit=$(jq -r '.commit // ""' <<<"${deployment}")
+            echo "Deployment ${DEPLOYMENT_UUID}: ${status} (${attempt}/90)."
+            case "${status}" in
+              finished)
+                if [ "${commit}" != "${TARGET_SHA}" ]; then
+                  echo "Coolify deployed ${commit:-unknown}, expected ${TARGET_SHA}." >&2
+                  exit 1
+                fi
+                deployment_finished=true
+                break
+                ;;
+              failed|cancelled|canceled)
+                echo "Coolify deployment ended with ${status}." >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          if [ "${deployment_finished}" != 'true' ]; then
+            echo 'Timed out waiting for Coolify deployment.' >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 30); do
+            application=$(curl --silent --show-error --fail \
+              --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
+              --header 'Accept: application/json' \
+              "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}")
+            app_status=$(jq -r '.status // "unknown"' <<<"${application}")
+            echo "Application status: ${app_status} (${attempt}/30)."
+            if [[ "${app_status}" == *healthy* ]]; then
+              exit 0
+            fi
+            if [[ "${app_status}" == exited:* ]]; then
+              exit 1
+            fi
+            sleep 5
+          done
+          echo 'Timed out waiting for a healthy application.' >&2
+          exit 1
+
+      - name: Mark release ready for smoke tests
+        if: steps.release.outputs.deployed == 'pending'
+        id: mark-release
+        shell: bash
+        run: echo 'deployed=true' >> "${GITHUB_OUTPUT}"
+
+  smoke:
+    name: Production acceptance
+    needs: deploy
+    if: needs.deploy.outputs.deployed == 'true'
+    uses: ./.github/workflows/diagnose-production.yml

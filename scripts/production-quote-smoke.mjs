@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test';
 
-const SITE_URL = 'https://jiahao.versecraft.cn/';
+const SITE_URL = `${(process.env.PRODUCTION_URL || 'https://jiahao.versecraft.cn').replace(/\/$/, '')}/`;
 const INPUT = '我今天通过了最终测试，准备发布。';
 
 let browser;

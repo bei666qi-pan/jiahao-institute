@@ -1,17 +1,37 @@
-name: Production Quote Smoke
+name: Production Smoke
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_call:
+    inputs:
+      production_url:
+        description: Production origin without a trailing slash
+        required: false
+        default: ''
+        type: string
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   production-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    environment:
+      name: production
+      url: ${{ inputs.production_url || vars.PRODUCTION_URL }}
+    env:
+      PRODUCTION_URL: ${{ inputs.production_url || vars.PRODUCTION_URL }}
     steps:
+      - name: Validate production URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${PRODUCTION_URL}" != https://* ]]; then
+            echo 'PRODUCTION_URL must be an https URL.' >&2
+            exit 1
+          fi
+
       - name: Wait for healthy production APIs
         shell: bash
         run: |
@@ -21,24 +41,24 @@ jobs:
             echo "=== production probe ${attempt}/24 ==="
             health_code=$(curl --silent --show-error --location --max-time 20 \
               --output /tmp/health.json --write-out '%{http_code}' \
-              https://jiahao.versecraft.cn/healthz || true)
+              "${PRODUCTION_URL%/}/healthz" || true)
             quote_code=$(curl --silent --show-error --location --max-time 55 \
               --request POST \
               --header 'Content-Type: application/json' \
               --data '{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}' \
               --output /tmp/quote.json --write-out '%{http_code}' \
-              https://jiahao.versecraft.cn/api/quote || true)
+              "${PRODUCTION_URL%/}/api/quote" || true)
             social_code=$(curl --silent --show-error --location --max-time 20 \
               --cookie-jar /tmp/social.cookies \
               --output /tmp/social.json --write-out '%{http_code}' \
-              https://jiahao.versecraft.cn/api/social/session || true)
+              "${PRODUCTION_URL%/}/api/social/session" || true)
 
             echo "health HTTP ${health_code}: $(cat /tmp/health.json 2>/dev/null || true)"
             echo "quote HTTP ${quote_code}: $(cat /tmp/quote.json 2>/dev/null || true)"
             echo "social HTTP ${social_code}: $(cat /tmp/social.json 2>/dev/null || true)"
 
             if [ "${health_code}" = '200' ] && [ "${quote_code}" = '200' ] && [ "${social_code}" = '200' ] \
-              && jq -e '.status == "ok" and .textModelConfigured == true' /tmp/health.json >/dev/null 2>&1 \
+              && jq -e '.status == "ok" and .textModelConfigured == true and .observability.databaseHealthy == true' /tmp/health.json >/dev/null 2>&1 \
               && jq -e '.output | type == "string" and length > 1' /tmp/quote.json >/dev/null 2>&1 \
               && jq -e '.enabled == true and (.rooms | type == "array")' /tmp/social.json >/dev/null 2>&1; then
               passed=true
