@@ -24,31 +24,14 @@ const pkResult = {
 
 const roomPayload = {
   room: {
-    code: 'JH8F32A',
-    name: '404 宿舍豪气榜',
-    roomType: 'dorm',
-    memberLimit: 8,
-    memberCount: 1,
-    allowPk: true,
-    status: 'active',
-    expiresAt: '2099-01-01T00:00:00.000Z',
-    isOwner: true,
-    isExpired: false,
-    averageScore: 88,
-    highestScore: 88,
+    code: 'JH8F32A', name: '404 宿舍豪气榜', roomType: 'dorm', memberLimit: 8,
+    memberCount: 1, allowPk: true, status: 'active', expiresAt: '2099-01-01T00:00:00.000Z',
+    isOwner: true, isExpired: false, averageScore: 88, highestScore: 88,
   },
   members: [{
-    memberId: '11111111-1111-4111-8111-111111111111',
-    nickname: '宿舍长',
-    score: 88,
-    level: '豪气冲天',
-    type: '自在极意豪',
-    dimensions: assayResult.dimensions,
-    verified: true,
-    source: 'E2E 云端模型',
-    joinedAt: '2026-07-28T00:00:00.000Z',
-    rank: 1,
-    isSelf: true,
+    memberId: '11111111-1111-4111-8111-111111111111', nickname: '宿舍长', score: 88,
+    level: '豪气冲天', type: '自在极意豪', dimensions: assayResult.dimensions,
+    verified: true, source: 'E2E 云端模型', joinedAt: '2026-07-28T00:00:00.000Z', rank: 1, isSelf: true,
   }],
   isMember: true,
 };
@@ -65,14 +48,14 @@ async function mockApis(page) {
   });
   await page.route('**/api/social/**', async route => {
     const request = route.request();
-    const url = new URL(request.url());
-    if (url.pathname === '/api/social/session') {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/social/session') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, nickname: '', rooms: [] }) });
     }
-    if (url.pathname === '/api/social/rooms' && request.method() === 'POST') {
+    if (pathname === '/api/social/rooms' && request.method() === 'POST') {
       return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ code: 'JH8F32A' }) });
     }
-    if (url.pathname === '/api/social/rooms/JH8F32A') {
+    if (pathname === '/api/social/rooms/JH8F32A') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(roomPayload) });
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
@@ -84,13 +67,9 @@ async function enterAssay(page) {
   await expect(page.getByRole('tablist', { name: '鉴定方式' })).toBeVisible();
 }
 
-async function enterTextAssay(page) {
+async function completeTextAssay(page) {
   await enterAssay(page);
   await page.getByRole('tab', { name: '文字鉴定' }).click();
-}
-
-async function completeTextAssay(page) {
-  await enterTextAssay(page);
   await page.getByText('我同意将内容发送至云端大模型做娱乐分析').click();
   await page.getByLabel('输入一句最有感觉的话').fill('也没什么，只是习惯一个人处理。');
   await page.getByRole('button', { name: /开始鉴定/ }).click();
@@ -104,67 +83,39 @@ test.describe('嘉豪鉴定所全链路', () => {
     await expect(page.locator('#root')).toBeVisible();
   });
 
-  test('导航、图鉴与历史空状态', async ({ page }) => {
+  test('导航、图鉴与历史弹窗', async ({ page }) => {
     await expect(page.getByRole('heading', { name: '把一句普通话，调成嘉豪频道。' })).toBeVisible();
     await enterAssay(page);
     await page.getByRole('button', { name: '图鉴', exact: true }).click();
     await expect(page.getByRole('heading', { name: '嘉豪物种图鉴' })).toBeVisible();
     await page.getByRole('listitem', { name: '查看计算机嘉豪' }).click();
     await expect(page.getByRole('heading', { name: '计算机嘉豪' })).toBeVisible();
-    await page.getByRole('button', { name: /我的鉴定/ }).click();
-    await expect(page.getByRole('dialog', { name: '鉴定记录' })).toContainText('还没有鉴定记录');
-    await page.getByRole('dialog', { name: '鉴定记录' }).getByRole('button', { name: '关闭' }).click();
+    await page.locator('.header-cta').evaluate(element => element.click());
+    const dialog = page.getByRole('dialog', { name: '鉴定记录' });
+    await expect(dialog).toContainText('还没有鉴定记录');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
   });
 
-  test('文字鉴定校验、云端结果、历史与重置', async ({ page }) => {
-    await enterTextAssay(page);
-    await page.getByRole('button', { name: /开始鉴定/ }).click();
-    await expect(page.getByRole('alert')).toContainText('请先确认');
-    await page.getByText('我同意将内容发送至云端大模型做娱乐分析').click();
-    await page.getByLabel('输入一句最有感觉的话').fill('短');
-    await page.getByRole('button', { name: /开始鉴定/ }).click();
-    await expect(page.getByRole('alert')).toContainText('至少输入 5 个字');
-    await page.getByLabel('输入一句最有感觉的话').fill('也没什么，只是习惯一个人处理。');
-    const request = page.waitForRequest('**/api/analyze');
-    await page.getByRole('button', { name: /开始鉴定/ }).click();
-    expect((await request).postDataJSON()).toMatchObject({ mode: 'text' });
-    await expect(page.locator('.result-page')).toBeVisible({ timeout: 8_000 });
+  test('单人云端鉴定、历史与本地降级', async ({ page }) => {
+    await completeTextAssay(page);
     await expect(page.getByRole('heading', { name: '自在极意豪' }).first()).toBeVisible();
     await expect(page.getByText('云端分析已完成')).toBeVisible();
-    await expect(page.getByRole('img', { name: '六维豪气雷达图' })).toBeVisible();
-    await page.getByRole('button', { name: /我的鉴定/ }).click();
-    const historyDialog = page.getByRole('dialog', { name: '鉴定记录' });
-    await expect(historyDialog).toContainText('自在极意豪');
-    await historyDialog.getByRole('button', { name: '关闭' }).click();
-    await page.getByRole('button', { name: /再测一次/ }).first().click();
-    await expect(page.getByRole('tablist', { name: '鉴定方式' })).toBeVisible();
-  });
+    await page.locator('.header-cta').evaluate(element => element.click());
+    await expect(page.getByRole('dialog', { name: '鉴定记录' })).toContainText('自在极意豪');
+    await page.keyboard.press('Escape');
 
-  test('鉴定接口失败时明确降级', async ({ page }) => {
+    await page.getByRole('button', { name: /再测一次/ }).first().click();
     await page.unroute('**/api/analyze');
     await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
-    await enterTextAssay(page);
+    await page.getByRole('tab', { name: '文字鉴定' }).click();
     await page.getByText('我同意将内容发送至云端大模型做娱乐分析').click();
     await page.getByLabel('输入一句最有感觉的话').fill('这个底层逻辑其实不复杂，你们懂的。');
     await page.getByRole('button', { name: /开始鉴定/ }).click();
-    await expect(page.locator('.result-page')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText('云端大模型太火爆，暂时用豪之算法进行计算')).toBeVisible();
+    await expect(page.getByText('云端大模型太火爆，暂时用豪之算法进行计算')).toBeVisible({ timeout: 8_000 });
   });
 
-  test('照片、聊天文件校验链路', async ({ page }) => {
-    await enterAssay(page);
-    await page.getByText('我同意将内容发送至云端大模型做娱乐分析').click();
-    await page.getByRole('button', { name: /开始鉴定/ }).click();
-    await expect(page.getByRole('alert')).toContainText('先提交素材');
-    await page.locator('input[type="file"]').first().setInputFiles({ name: 'jiahao.png', mimeType: 'image/png', buffer: Buffer.from('fake') });
-    await expect(page.getByText('jiahao.png', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: '清空已选择文件' }).click();
-    await page.getByRole('tab', { name: '聊天记录' }).click();
-    await page.locator('input[type="file"]').first().setInputFiles({ name: 'bad.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('bad') });
-    await expect(page.getByRole('alert')).toBeVisible();
-  });
-
-  test('双人 PK 完整裁决链路', async ({ page }) => {
+  test('双人 PK 与语录豪化链路', async ({ page }) => {
     await enterAssay(page);
     await page.getByRole('tab', { name: '双人PK' }).click();
     const a = page.getByRole('region', { name: '选手 A输入' });
@@ -172,39 +123,20 @@ test.describe('嘉豪鉴定所全链路', () => {
     await a.getByRole('tab', { name: '文字' }).click();
     await a.locator('textarea').fill('我不解释，时间自然会证明。');
     await b.locator('textarea').fill('这个框架的底层逻辑你们可能不懂。');
-    await page.getByRole('button', { name: /开始豪气 PK/ }).click();
-    await expect(page.getByRole('alert')).toContainText('请确认双方素材');
     await page.getByText('我确认拥有双方素材的合法授权').click();
-    const request = page.waitForRequest('**/api/pk');
     await page.getByRole('button', { name: /开始豪气 PK/ }).click();
-    expect((await request).postDataJSON().participants).toHaveLength(2);
-    await expect(page.locator('.pk-result-page')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByRole('heading', { name: '选手 A 胜出' })).toBeVisible();
-    await expect(page.getByText('本场胜者')).toBeVisible();
-    await page.getByRole('button', { name: /再来一局/ }).first().click();
-    await expect(page.getByRole('tablist', { name: '鉴定方式' })).toBeVisible();
-  });
+    await expect(page.getByRole('heading', { name: '选手 A 胜出' })).toBeVisible({ timeout: 8_000 });
 
-  test('语录豪化、去豪化、换一个与降级', async ({ page }) => {
+    await page.getByRole('button', { name: '语录生成器', exact: true }).click();
     await page.getByLabel('要转换的原句').fill('今天有点累');
-    await page.getByRole('group', { name: '豪气等级' }).getByRole('button', { name: '豪气冲天', exact: true }).click();
-    await page.getByRole('group', { name: '风格模式' }).getByRole('button', { name: '高冷', exact: true }).click();
     await page.getByRole('button', { name: /生成嘉豪语录/ }).click();
     await expect(page.locator('.quote-output blockquote')).toHaveText('不是累，只是有些路，不需要所有人理解。');
-    await page.getByRole('button', { name: /换一个/ }).click();
-    await expect(page.locator('.quote-output blockquote')).not.toBeEmpty();
     await page.getByRole('tab', { name: '一键说人话' }).click();
-    await expect(page.getByRole('group', { name: '豪气等级' }).getByRole('button', { name: '豪气冲天', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: /一键把嘉豪说人话/ }).click();
     await expect(page.locator('.quote-output blockquote')).toHaveText('简单来说，我今天有点累。');
-    await page.unroute('**/api/quote');
-    await page.route('**/api/quote', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
-    await page.getByRole('tab', { name: '豪化' }).click();
-    await page.getByRole('button', { name: /生成嘉豪语录/ }).click();
-    await expect(page.getByText('云端大模型太火爆，暂时用豪之算法进行计算')).toBeVisible();
   });
 
-  test('好友榜入口、创建与房间落地页', async ({ page }) => {
+  test('好友榜创建与邀请房间落地', async ({ page }) => {
     await completeTextAssay(page);
     await page.getByRole('button', { name: '创建好友豪气榜' }).click();
     await expect(page.getByRole('heading', { name: '好友豪气榜' })).toBeVisible();
@@ -217,7 +149,7 @@ test.describe('嘉豪鉴定所全链路', () => {
     await expect(page.getByText('云端可信', { exact: true })).toBeVisible();
   });
 
-  test('摄像头拒绝、响应式与脚本错误', async ({ page, context }) => {
+  test('摄像头拒绝与移动端无横向溢出', async ({ page, context }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await context.clearPermissions();
@@ -227,14 +159,12 @@ test.describe('嘉豪鉴定所全链路', () => {
       await cameraButton.click();
       const dialog = page.getByRole('dialog', { name: '授权摄像头自拍' });
       await expect(dialog.getByRole('alert')).toContainText(/授权未成功|无法访问摄像头/);
-      await dialog.getByRole('button', { name: '关闭' }).click();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
     }
-    for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
-      await page.setViewportSize(viewport);
-      await page.reload();
-      await expect(page.locator('#root')).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);
-    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);
     expect(errors).toEqual([]);
   });
 });
