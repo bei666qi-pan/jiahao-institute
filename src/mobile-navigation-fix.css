@@ -1,6 +1,11 @@
 /* Mobile navigation and overlay reliability layer. */
 .modal-backdrop {
-  z-index: 1000 !important;
+  z-index: 2000 !important;
+}
+
+.modal-open .site-header,
+.modal-open .site-header * {
+  pointer-events: none !important;
 }
 
 @media (max-width: 760px) {
@@ -9,15 +14,20 @@
   }
 
   .site-header {
+    position: sticky !important;
+    top: 0;
+    z-index: 800 !important;
     grid-template-columns: 1fr auto !important;
   }
 
   .site-header nav {
     position: fixed;
-    z-index: 90;
+    z-index: 900;
+    top: auto;
     left: 0;
     right: 0;
     bottom: 0;
+    width: 100%;
     display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0 !important;
