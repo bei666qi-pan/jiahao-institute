@@ -8,7 +8,7 @@ on:
 jobs:
   production-diagnosis:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
       - name: Probe health and quote endpoint
         shell: bash
@@ -34,3 +34,14 @@ jobs:
           echo
 
           test "${health_code}" = '200'
+          test "${quote_code}" = '200'
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Exercise production UI
+        run: npx playwright test test/e2e/production-quote.spec.js --project=chromium --reporter=line
