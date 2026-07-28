@@ -355,7 +355,7 @@ export class Observability {
 
   async costs(rangeValue) {
     const range = getRangeConfig(rangeValue);
-    const [byDay, byProvider, byEndpoint] = await Promise.all([
+    const results = await Promise.allSettled([
       this.query(`select (occurred_at at time zone '${SHANGHAI_TIME_ZONE}')::date day,
         coalesce(sum(input_tokens),0)::bigint input_tokens, coalesce(sum(output_tokens),0)::bigint output_tokens,
         coalesce(sum(cached_input_tokens),0)::bigint cached_input_tokens, coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros,
@@ -369,7 +369,18 @@ export class Observability {
       this.query(`select endpoint, count(*)::bigint requests, coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros
         from jh_api_requests where occurred_at >= $1 and occurred_at < $2 group by endpoint order by estimated_cost_micros desc`, [range.start, range.end]),
     ]);
-    return { range: range.key, byDay: byDay.rows, byProvider: byProvider.rows, byEndpoint: byEndpoint.rows };
+    const failed = results.filter((result) => result.status === 'rejected');
+    if (failed.length === results.length) throw failed[0].reason;
+    const rows = (index) => results[index].status === 'fulfilled' ? results[index].value.rows : [];
+    return {
+      range: range.key,
+      generatedAt: new Date().toISOString(),
+      byDay: rows(0),
+      byProvider: rows(1),
+      byEndpoint: rows(2),
+      partial: failed.length > 0,
+      unavailableBreakdowns: ['day', 'provider', 'endpoint'].filter((_, index) => results[index].status === 'rejected'),
+    };
   }
 
   status(extra = {}) {

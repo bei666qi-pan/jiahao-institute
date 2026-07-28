@@ -163,7 +163,7 @@ function analyze(input, mode, files) {
     dimensions,
     top: sorted.slice(0, 3),
     evidence: sorted.slice(0, 3).map((item) => evidenceMap[item.key]),
-    comment: `你并没有主动展示豪气，但${sorted[0].label}已经从内容边缘自然溢出。${sorted[1].label}与${sorted[2].label}完成闭环，最终呈现为“${type}”。建议保持现状，再刻意一点可能就不自然了。`,
+    comment: `你嘴上说着随便，${sorted[0].label}却第一个冲进镜头，${sorted[1].label}还顺手把门反锁了。至于${sorted[2].label}，它表面没说话，实际上已经替“${type}”签完到。`,
     createdAt: Date.now(),
     mode,
     source: '豪之算法',

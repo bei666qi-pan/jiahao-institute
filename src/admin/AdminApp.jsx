@@ -227,12 +227,15 @@ function RequestsPage({ data, filters, onFilters, onMore }) {
 }
 
 function CostsPage({ data }) {
-  const total = data.byProvider.reduce((sum, row) => sum + Number(row.estimated_cost_micros || row.estimatedCostMicros || 0), 0);
-  const requests = data.byProvider.reduce((sum, row) => sum + Number(row.requests || 0), 0);
-  const input = data.byProvider.reduce((sum, row) => sum + Number(row.input_tokens || 0), 0);
-  const output = data.byProvider.reduce((sum, row) => sum + Number(row.output_tokens || 0), 0);
-  return <div className="detail-page"><section className="detail-summary"><Metric label="预估总成本" value={formatCost(total)} change={0} /><Metric label="已计价请求" value={formatNumber(requests)} change={0} /><Metric label="输入 Token" value={formatNumber(input)} change={0} /><Metric label="输出 Token" value={formatNumber(output)} change={0} /></section>
-    <section className="cost-layout"><div className="data-table-wrap"><h2>模型供应商成本</h2>{data.byProvider.length ? <table><thead><tr><th>供应商 / 模型</th><th>请求</th><th>输入</th><th>输出</th><th>缓存输入</th><th>预估成本</th></tr></thead><tbody>{data.byProvider.map((row) => <tr key={`${row.provider}-${row.model}`}><td>{row.provider}<small>{row.model}</small></td><td>{formatNumber(row.requests)}</td><td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatCost(row.estimated_cost_micros || row.estimatedCostMicros)}</td></tr>)}</tbody></table> : <Empty />}</div><div className="provider-bars"><h2>成本占比</h2>{data.byProvider.map((row) => { const cost = Number(row.estimated_cost_micros || row.estimatedCostMicros || 0); return <div key={row.provider}><span>{row.provider}</span><strong>{formatCost(cost)}</strong><i><b style={{ width: `${total ? cost / total * 100 : 0}%` }} /></i></div>; })}</div></section>
+  const providers = Array.isArray(data.byProvider) ? data.byProvider : [];
+  const days = Array.isArray(data.byDay) ? data.byDay : [];
+  const summaryRows = providers.length ? providers : days;
+  const total = summaryRows.reduce((sum, row) => sum + Number(row.estimated_cost_micros || row.estimatedCostMicros || 0), 0);
+  const pricedRequests = summaryRows.reduce((sum, row) => sum + Number(row.priced_requests || row.pricedRequests || 0), 0);
+  const input = summaryRows.reduce((sum, row) => sum + Number(row.input_tokens || 0), 0);
+  const output = summaryRows.reduce((sum, row) => sum + Number(row.output_tokens || 0), 0);
+  return <div className="detail-page">{data.partial ? <div className="coverage-warning" role="status">部分统计维度暂时未返回，已展示可用的成本数据；刷新后会自动重试。</div> : null}<section className="detail-summary"><Metric label="预估总成本" value={formatCost(total)} change={0} /><Metric label="已计价请求" value={formatNumber(pricedRequests)} change={0} /><Metric label="输入 Token" value={formatNumber(input)} change={0} /><Metric label="输出 Token" value={formatNumber(output)} change={0} /></section>
+    <section className="cost-layout"><div className="data-table-wrap"><h2>模型供应商成本</h2>{providers.length ? <table><thead><tr><th>供应商 / 模型</th><th>请求</th><th>输入</th><th>输出</th><th>缓存输入</th><th>预估成本</th></tr></thead><tbody>{providers.map((row) => <tr key={`${row.provider}-${row.model}`}><td>{row.provider}<small>{row.model}</small></td><td>{formatNumber(row.requests)}</td><td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatCost(row.estimated_cost_micros || row.estimatedCostMicros)}</td></tr>)}</tbody></table> : <Empty title={data.partial ? '供应商明细暂未返回' : undefined} detail={data.partial ? '总量数据仍可查看，请稍后刷新明细。' : undefined} />}</div><div className="provider-bars"><h2>成本占比</h2>{providers.map((row) => { const cost = Number(row.estimated_cost_micros || row.estimatedCostMicros || 0); return <div key={`${row.provider}-${row.model}`}><span>{row.provider}<small>{row.model}</small></span><strong>{formatCost(cost)}</strong><i><b style={{ width: `${total ? cost / total * 100 : 0}%` }} /></i></div>; })}</div></section>
   </div>;
 }
 
