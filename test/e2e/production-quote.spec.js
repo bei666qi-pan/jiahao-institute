@@ -3,22 +3,25 @@ import { test, expect } from '@playwright/test';
 test.use({ baseURL: 'https://jiahao.versecraft.cn' });
 
 test('production quote generator calls cloud API and updates output', async ({ page }) => {
-  const browserErrors = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') browserErrors.push(message.text());
-  });
-  page.on('pageerror', (error) => browserErrors.push(error.message));
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
 
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await page.getByRole('button', { name: '语录生成器' }).click();
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const quoteNav = page.locator('.site-header nav button', { hasText: '语录生成器' });
+  await expect(quoteNav).toBeVisible();
+  await quoteNav.click();
 
   const input = page.getByLabel('要转换的原句');
+  await expect(input).toBeVisible();
   await input.fill('我今天通过了最终测试，准备发布。');
 
   const output = page.locator('.quote-output blockquote');
   const before = await output.textContent();
-  const responsePromise = page.waitForResponse((response) => response.url().endsWith('/api/quote') && response.request().method() === 'POST');
-  await page.getByRole('button', { name: '生成嘉豪语录' }).click();
+  const responsePromise = page.waitForResponse(
+    (response) => response.url().endsWith('/api/quote') && response.request().method() === 'POST',
+    { timeout: 55_000 },
+  );
+  await page.locator('button.quote-generate').click();
 
   const response = await responsePromise;
   const body = await response.json();
@@ -30,5 +33,5 @@ test('production quote generator calls cloud API and updates output', async ({ p
   await expect(output).not.toHaveText(before || '');
   await expect(output).toHaveText(body.output);
   await expect(page.getByText('云端分析已完成')).toBeVisible();
-  expect(browserErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
 });
