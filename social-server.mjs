@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { server } from './server.mjs';
 import { Observability } from './server/observability.mjs';
+import { handleQuoteRequest } from './server/quote.mjs';
 import { SocialService, signSocialResult } from './server/social.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
@@ -49,6 +50,9 @@ function attachResultSignature(res) {
 server.on('request', async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if (await social.handle(req, res, url)) return;
+  if (req.method === 'POST' && url.pathname === '/api/quote') {
+    return handleQuoteRequest(req, res, maintenance);
+  }
   if (req.method === 'POST' && url.pathname === '/api/analyze') attachResultSignature(res);
   return originalRequestHandler(req, res);
 });

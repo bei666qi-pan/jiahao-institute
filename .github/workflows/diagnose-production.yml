@@ -59,7 +59,7 @@ jobs:
 
             if [ "${health_code}" = '200' ] && [ "${quote_code}" = '200' ] && [ "${social_code}" = '200' ] \
               && jq -e '.status == "ok" and .textModelConfigured == true and .observability.databaseHealthy == true' /tmp/health.json >/dev/null 2>&1 \
-              && jq -e '.output | type == "string" and length > 1' /tmp/quote.json >/dev/null 2>&1 \
+              && jq -e '.source == "云端文字大模型" and (.output | type == "string" and length > 1) and .output != "今天有点累。"' /tmp/quote.json >/dev/null 2>&1 \
               && jq -e '.enabled == true and (.rooms | type == "array")' /tmp/social.json >/dev/null 2>&1; then
               passed=true
               break
