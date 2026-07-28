@@ -1,0 +1,645 @@
+/* 2026 UI refinement layer. Loaded after the original design system. */
+
+:root {
+  --ui-surface: rgba(10, 18, 31, .88);
+  --ui-surface-strong: rgba(13, 25, 43, .96);
+  --ui-border: rgba(115, 215, 255, .22);
+  --ui-border-strong: rgba(115, 215, 255, .54);
+  --ui-muted: rgba(234, 242, 255, .62);
+  --ui-radius-sm: 10px;
+  --ui-radius-md: 16px;
+  --ui-radius-lg: 24px;
+  --ui-shadow: 0 24px 80px rgba(0, 0, 0, .26), 0 0 0 1px rgba(115, 215, 255, .05);
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 6%, rgba(47, 123, 255, .12), transparent 30rem),
+    radial-gradient(circle at 86% 32%, rgba(115, 215, 255, .06), transparent 26rem),
+    var(--paper);
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  height: 76px;
+  border-bottom-color: rgba(115, 215, 255, .2);
+  background: rgba(5, 10, 18, .78);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .18);
+  backdrop-filter: blur(22px) saturate(1.15);
+}
+
+.site-header nav {
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid rgba(115, 215, 255, .14);
+  border-radius: 999px;
+  background: rgba(12, 22, 37, .62);
+}
+
+.site-header nav a,
+.site-header nav button {
+  min-height: 38px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(234, 242, 255, .66);
+}
+
+.site-header nav a:hover,
+.site-header nav button:hover {
+  border-color: transparent;
+  background: rgba(47, 123, 255, .12);
+  color: var(--blue);
+}
+
+.site-header nav button.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, rgba(47, 123, 255, .96), rgba(53, 148, 255, .78));
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(47, 123, 255, .26);
+}
+
+.header-cta {
+  min-height: 44px;
+  gap: 10px;
+  padding: 10px 16px;
+  border-color: rgba(115, 215, 255, .28);
+  border-radius: 12px;
+  background: rgba(47, 123, 255, .1);
+}
+
+.header-cta:hover {
+  transform: translateY(-1px);
+}
+
+/* Home and result polish */
+.hero,
+.result-hero,
+.pk-result-hero,
+.species-section,
+.evidence-section,
+.pk-commentary {
+  border-inline-color: rgba(115, 215, 255, .18);
+}
+
+.hero-scan,
+.score-block,
+.dimension-block,
+.share-preview,
+.species-stage,
+.commentary,
+.pk-player-result {
+  border-radius: var(--ui-radius-md);
+}
+
+.mode-tabs button,
+.input-area,
+.primary-action,
+.secondary-action,
+.participant-card,
+.participant-text,
+.participant-photo,
+.participant-upload {
+  border-radius: var(--ui-radius-sm);
+}
+
+.primary-action {
+  box-shadow: 0 15px 38px rgba(47, 123, 255, .19);
+}
+
+.primary-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 46px rgba(47, 123, 255, .27);
+}
+
+.how-it-works {
+  gap: 1px;
+  border-color: rgba(115, 215, 255, .16);
+  background: rgba(115, 215, 255, .16);
+}
+
+.how-it-works > div {
+  border: 0;
+  background: rgba(7, 11, 18, .96);
+}
+
+/* Quote generator */
+.quote-page {
+  position: relative;
+  min-height: calc(100svh - 76px);
+  padding: 0 clamp(18px, 3.5vw, 54px) 46px;
+  border-inline-color: rgba(115, 215, 255, .16);
+  background:
+    radial-gradient(circle at 75% 18%, rgba(47, 123, 255, .16), transparent 25rem),
+    linear-gradient(rgba(47, 123, 255, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 123, 255, .025) 1px, transparent 1px);
+  background-size: auto, 64px 64px, 64px 64px;
+}
+
+.quote-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(115, 215, 255, .03), transparent 280px);
+}
+
+.quote-intro {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 34px;
+  padding: clamp(42px, 5vw, 74px) 8px clamp(28px, 3vw, 42px);
+}
+
+.quote-intro::after {
+  content: "TEXT  →  JIAHAO";
+  align-self: center;
+  padding: 11px 14px;
+  border: 1px solid rgba(115, 215, 255, .24);
+  border-radius: 999px;
+  background: rgba(47, 123, 255, .08);
+  color: var(--blue);
+  font: 700 10px/1 monospace;
+  letter-spacing: .14em;
+  white-space: nowrap;
+}
+
+.quote-intro h1 {
+  max-width: 900px;
+  font-size: clamp(48px, 5.2vw, 78px);
+  line-height: .98;
+  letter-spacing: -.065em;
+  text-wrap: balance;
+}
+
+.quote-intro p {
+  max-width: 680px;
+  margin-top: 20px;
+  color: var(--ui-muted);
+  font-size: clamp(15px, 1.35vw, 20px);
+  line-height: 1.65;
+}
+
+.quote-workspace {
+  position: relative;
+  z-index: 1;
+  grid-template-columns: minmax(360px, .83fr) minmax(460px, 1.17fr);
+  align-items: start;
+  gap: clamp(18px, 2vw, 30px);
+}
+
+.quote-editor,
+.quote-output {
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background:
+    linear-gradient(145deg, rgba(16, 31, 53, .88), rgba(7, 12, 21, .94));
+  box-shadow: var(--ui-shadow), inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.quote-editor {
+  padding: clamp(20px, 2.2vw, 30px);
+}
+
+.quote-output {
+  position: sticky;
+  top: 96px;
+  padding: clamp(20px, 2.2vw, 30px);
+  overflow: hidden;
+}
+
+.quote-output::before {
+  content: "";
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  top: -170px;
+  right: -100px;
+  border-radius: 50%;
+  background: rgba(47, 123, 255, .2);
+  filter: blur(55px);
+  pointer-events: none;
+}
+
+.quote-field-head h2,
+.quote-output h2 {
+  color: var(--blue);
+  font-size: 12px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.quote-field-head span,
+.quote-output > header span {
+  color: rgba(234, 242, 255, .46);
+}
+
+.quote-editor > textarea {
+  height: 146px;
+  margin-top: 16px;
+  border-color: rgba(115, 215, 255, .18);
+  border-radius: 14px;
+  padding: 20px;
+  background: rgba(3, 8, 15, .52);
+  font-size: clamp(17px, 1.35vw, 20px);
+  line-height: 1.7;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .015);
+}
+
+.quote-editor > textarea:hover {
+  border-color: rgba(115, 215, 255, .34);
+}
+
+.quote-editor > textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(47, 123, 255, .1), inset 0 0 32px rgba(47, 123, 255, .06);
+}
+
+.quote-mode {
+  gap: 10px;
+  margin-top: 14px;
+  padding: 5px;
+  border: 1px solid rgba(115, 215, 255, .13);
+  border-radius: 14px;
+  background: rgba(3, 8, 15, .38);
+}
+
+.quote-mode button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.quote-mode button.active {
+  background: linear-gradient(135deg, rgba(47, 123, 255, .95), rgba(56, 146, 255, .72));
+  box-shadow: 0 10px 28px rgba(47, 123, 255, .24);
+}
+
+.quote-editor fieldset {
+  margin-top: 24px;
+}
+
+.quote-editor legend {
+  margin-bottom: 14px;
+  color: rgba(234, 242, 255, .62);
+  font-size: 11px;
+  letter-spacing: .1em;
+}
+
+.quote-levels > div {
+  gap: 8px;
+}
+
+.quote-levels > div::before {
+  display: none;
+}
+
+.quote-levels button {
+  min-height: 64px;
+  align-content: center;
+  gap: 7px;
+  padding: 9px 5px;
+  border: 1px solid rgba(115, 215, 255, .14);
+  border-radius: 11px;
+  background: rgba(3, 8, 15, .34);
+  color: rgba(234, 242, 255, .5);
+  font-size: 10px;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.quote-levels i {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  background: rgba(234, 242, 255, .22);
+  box-shadow: none;
+}
+
+.quote-levels button:hover {
+  border-color: rgba(115, 215, 255, .42);
+  color: var(--ink);
+}
+
+.quote-levels button.active {
+  border-color: rgba(115, 215, 255, .58);
+  background: linear-gradient(145deg, rgba(47, 123, 255, .2), rgba(115, 215, 255, .05));
+  color: var(--blue);
+  box-shadow: inset 0 0 24px rgba(47, 123, 255, .1);
+}
+
+.quote-levels button.active i {
+  background: var(--blue);
+  box-shadow: 0 0 0 5px rgba(47, 123, 255, .12), 0 0 14px rgba(115, 215, 255, .75);
+}
+
+.quote-styles > div {
+  gap: 8px;
+}
+
+.quote-styles button {
+  min-height: 42px;
+  border-radius: 10px;
+  background: rgba(3, 8, 15, .3);
+}
+
+.quote-styles button.active {
+  background: rgba(47, 123, 255, .15);
+  box-shadow: inset 0 0 18px rgba(47, 123, 255, .1), 0 8px 20px rgba(0, 0, 0, .14);
+}
+
+.quote-generate {
+  min-height: 60px;
+  margin-top: 24px;
+  border-radius: 13px;
+  font-size: 16px;
+  letter-spacing: .02em;
+}
+
+.quote-output > header {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 18px;
+  border-bottom-color: rgba(115, 215, 255, .16);
+}
+
+.quote-output .model-source-notice {
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+}
+
+.quote-output blockquote {
+  position: relative;
+  z-index: 1;
+  min-height: 220px;
+  margin-top: 12px;
+  padding: clamp(30px, 4vw, 56px);
+  border: 1px solid rgba(115, 215, 255, .16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(47, 123, 255, .16), transparent 35%),
+    rgba(3, 8, 15, .34);
+  font-size: clamp(27px, 2.5vw, 40px);
+  line-height: 1.48;
+  text-wrap: balance;
+  animation: quote-rise .42s ease both;
+}
+
+.quote-output blockquote::before {
+  content: "“";
+  position: absolute;
+  top: 2px;
+  left: 18px;
+  color: rgba(115, 215, 255, .18);
+  font: 900 92px/1 Georgia, serif;
+}
+
+@keyframes quote-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.quote-actions {
+  position: relative;
+  z-index: 1;
+  gap: 10px;
+  margin: 14px 0 22px;
+}
+
+.quote-actions button {
+  min-height: 48px;
+  border-radius: 11px;
+  background: rgba(12, 22, 37, .66);
+}
+
+.quote-actions button:first-child {
+  border-color: rgba(115, 215, 255, .54);
+  background: rgba(47, 123, 255, .14);
+  color: var(--blue);
+}
+
+.share-card-preview {
+  position: relative;
+  z-index: 1;
+}
+
+.share-card-preview > span {
+  margin-bottom: 10px;
+  color: rgba(234, 242, 255, .48);
+  font-size: 10px;
+  letter-spacing: .1em;
+}
+
+.share-card-preview > div {
+  min-height: 210px;
+  border-color: rgba(115, 215, 255, .28);
+  border-radius: 16px;
+  padding: clamp(28px, 3vw, 42px);
+  background:
+    linear-gradient(145deg, rgba(47, 123, 255, .11), rgba(3, 8, 15, .72)),
+    linear-gradient(rgba(115, 215, 255, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(115, 215, 255, .035) 1px, transparent 1px);
+  background-size: auto, 30px 30px, 30px 30px;
+  box-shadow: inset 0 0 40px rgba(47, 123, 255, .05);
+}
+
+.share-card-preview p {
+  max-width: 82%;
+  font-size: clamp(19px, 1.7vw, 27px);
+}
+
+.share-card-preview strong {
+  padding-top: 12px;
+  border-top: 1px solid rgba(115, 215, 255, .18);
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+
+.quote-privacy {
+  margin-top: 14px;
+}
+
+.quote-notice {
+  right: 30px;
+  bottom: 28px;
+  border-radius: 9px;
+  background: rgba(5, 10, 18, .94);
+}
+
+.quote-presets {
+  position: relative;
+  z-index: 1;
+  min-height: 78px;
+  grid-template-columns: auto repeat(5, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+  padding: 14px;
+  border-color: rgba(115, 215, 255, .17);
+  border-radius: 17px;
+  background: rgba(8, 15, 27, .7);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .16);
+}
+
+.quote-presets strong {
+  padding-inline: 8px 14px;
+  color: rgba(234, 242, 255, .52);
+  letter-spacing: .08em;
+}
+
+.quote-presets button {
+  min-height: 46px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(3, 8, 15, .3);
+}
+
+.quote-presets button:hover {
+  transform: translateY(-1px);
+  background: rgba(47, 123, 255, .11);
+}
+
+@media (max-width: 1080px) {
+  .quote-intro {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .quote-intro::after {
+    justify-self: start;
+    grid-row: 1;
+  }
+
+  .quote-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-editor,
+  .quote-output {
+    width: 100%;
+  }
+
+  .quote-output {
+    position: relative;
+    top: auto;
+  }
+
+  .quote-presets {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .quote-presets strong,
+  .quote-presets button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .site-header {
+    height: 62px;
+    backdrop-filter: blur(18px);
+  }
+
+  .site-header nav {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .site-header nav button.active {
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: rgba(47, 123, 255, .14);
+    color: var(--blue);
+    box-shadow: none;
+  }
+
+  .quote-page {
+    min-height: calc(100svh - 62px);
+    padding-inline: 12px;
+  }
+
+  .quote-intro {
+    padding: 30px 4px 22px;
+  }
+
+  .quote-intro h1 {
+    font-size: clamp(39px, 12vw, 54px);
+  }
+
+  .quote-intro p {
+    margin-top: 14px;
+    font-size: 14px;
+  }
+
+  .quote-editor,
+  .quote-output {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .quote-editor > textarea {
+    height: 118px;
+    padding: 16px;
+  }
+
+  .quote-levels > div {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .quote-levels button {
+    min-height: 52px;
+  }
+
+  .quote-styles > div {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .quote-output blockquote {
+    min-height: 180px;
+    padding: 34px 20px 26px;
+    font-size: clamp(24px, 7.4vw, 31px);
+  }
+
+  .quote-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .quote-actions button:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .share-card-preview > div {
+    min-height: 188px;
+    padding: 26px 22px;
+  }
+
+  .share-card-preview p {
+    max-width: 100%;
+  }
+
+  .quote-notice {
+    position: static;
+    max-width: none;
+    margin-top: 12px;
+  }
+
+  .quote-presets {
+    margin-top: 14px;
+    border-radius: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quote-output blockquote {
+    animation: none;
+  }
+}
