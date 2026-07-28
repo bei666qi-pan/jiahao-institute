@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { calculateEstimatedCost } from './observability.mjs';
 
-export const QUOTE_SERVICE_VERSION = 3;
+export const QUOTE_SERVICE_VERSION = 4;
 
 const LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
 const STYLES = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
@@ -10,8 +10,10 @@ const MAX_BODY_BYTES = 64 * 1024;
 const QUOTE_RULES = `这是友善的娱乐玩梗工具，不得侮辱、骚扰或煽动伤害任何人，也不要生成仇恨、色情、违法或针对敏感属性的内容。
 
 任务只有两种：
-1. hao：把普通话真正改写成嘉豪式表达。需要保留原意，但增加克制、欲言又止、看似无所谓和戏剧化留白；不能原样复述输入，不能只添加标点或语气词。
+1. hao：把普通话真正改写成嘉豪式表达。需要保留原意或核心意象，但增加克制、欲言又止、看似无所谓和戏剧化留白；不能原样复述输入，不能只添加标点或语气词。
 2. dehao：去掉故作高深、否定式强调和优越感，改成直接、自然、礼貌的普通表达；不能原样复述输入。
+
+短句与名词片段规则：输入只有 2 到 8 个字时，hao 必须扩写成完整、明显不同且可单独发布的句子，保留输入中的核心意象。豪气冲天或自在极意豪通常至少 12 个字。不要把“凡人之血”原样返回；可改写成“凡人之血，也配让我停步？”这类完整表达。
 
 豪气等级从弱到强：豪气初现、豪气逼人、豪气冲天、自在极意豪。
 风格包括：深情、高冷、小众、无意炫耀、战斗、朋友圈、个性签名、评论区。`;
@@ -102,6 +104,41 @@ function comparable(value) {
   return text.replace(/[\s，。！？、,.!?"“”'‘’：:；;（）()【】\[\]-]/g, '');
 }
 
+function meaningfulChars(value) {
+  return [...new Set((typeof value === 'string' ? value : '').match(/[\p{Script=Han}A-Za-z0-9]/gu) || [])];
+}
+
+function minimumHaoLength(payload) {
+  const inputLength = comparable(payload.input).length;
+  if (payload.style === '个性签名') return Math.max(8, inputLength + 3);
+  const byLevel = {
+    豪气初现: 8,
+    豪气逼人: 10,
+    豪气冲天: 12,
+    自在极意豪: 14,
+  };
+  return Math.max(byLevel[payload.level] || 12, inputLength + 4);
+}
+
+export function assertQuoteQuality(output, payload) {
+  const compactOutput = comparable(output);
+  const compactInput = comparable(payload.input);
+  if (compactOutput.length < 2) throw new Error('模型返回的语录为空');
+  if (compactOutput === compactInput) throw new Error('模型未完成改写');
+  if (payload.mode !== 'hao') return;
+
+  if (compactInput.length <= 8 && compactOutput.length < minimumHaoLength(payload)) {
+    throw new Error('豪化幅度不足，短句需要扩写成完整表达');
+  }
+
+  if (compactInput.length <= 4) {
+    const anchors = meaningfulChars(payload.input);
+    const retained = anchors.filter((char) => compactOutput.includes(char)).length;
+    const required = Math.min(2, anchors.length);
+    if (retained < required) throw new Error('豪化结果丢失了原句核心意象');
+  }
+}
+
 function nonNegativeInteger(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? Math.round(number) : null;
@@ -160,9 +197,31 @@ export function parseQuoteModelResponse(data, payload) {
     rawOutput = extractPlainQuote(candidate);
   }
 
-  if (rawOutput.length < 2) throw new Error('模型返回的语录为空');
-  if (comparable(rawOutput) === comparable(payload.input)) throw new Error('模型未完成改写');
+  assertQuoteQuality(rawOutput, payload);
   return rawOutput.slice(0, 160);
+}
+
+export function makeCalibratedHaoQuote(payload) {
+  const source = payload.input.trim().replace(/[。！？!?]+$/, '') || '这点事';
+  const highCold = {
+    豪气初现: `${source}，也不过如此。`,
+    豪气逼人: `${source}，还不足以让我回头。`,
+    豪气冲天: `${source}，也配让我停下脚步？`,
+    自在极意豪: `${source}落尽，我仍立于众生之上。`,
+  };
+  const variants = {
+    深情: `${source}未冷，有些名字便不必再提。`,
+    高冷: highCold[payload.level] || highCold['豪气冲天'],
+    小众: `${source}，这种意象本来就不是给所有人懂的。`,
+    无意炫耀: `${source}而已，也不算什么，我早就见惯了。`,
+    战斗: `${source}能染红来路，却拦不住我继续向前。`,
+    朋友圈: `${source}。\n路还长，没必要解释。`,
+    个性签名: `${source}未冷，我便不会低头。`,
+    评论区: `${source}罢了，真正经历过的人不会多说。`,
+  };
+  const output = variants[payload.style] || highCold[payload.level] || highCold['豪气冲天'];
+  assertQuoteQuality(output, payload);
+  return output;
 }
 
 export function getQuoteProvider(env = process.env) {
@@ -180,6 +239,11 @@ export function getQuoteProvider(env = process.env) {
   };
 }
 
+function shortInputHint(payload) {
+  if (payload.mode !== 'hao' || comparable(payload.input).length > 8) return '';
+  return `\n短句强制要求：必须保留原句核心意象，扩写到至少 ${minimumHaoLength(payload)} 个有效字符，不能只复述或只加标点。`;
+}
+
 async function requestAttempt(fetchImpl, provider, payload, attempt) {
   const controller = new AbortController();
   const timeoutMs = attempt === 0 ? 28_000 : 18_000;
@@ -192,8 +256,8 @@ async function requestAttempt(fetchImpl, provider, payload, attempt) {
       {
         role: 'user',
         content: jsonMode
-          ? `任务：${payload.mode}\n豪气等级：${payload.level}\n风格：${payload.style}\n原句：${payload.input}\n请只返回 JSON。`
-          : `任务：${payload.mode}\n豪气等级：${payload.level}\n风格：${payload.style}\n原句：${payload.input}\n上一次结果不可用，请只输出与原句明显不同的最终改写句子。`,
+          ? `任务：${payload.mode}\n豪气等级：${payload.level}\n风格：${payload.style}\n原句：${payload.input}${shortInputHint(payload)}\n请只返回 JSON。`
+          : `任务：${payload.mode}\n豪气等级：${payload.level}\n风格：${payload.style}\n原句：${payload.input}${shortInputHint(payload)}\n上一次结果不可用，请只输出与原句明显不同的最终改写句子。`,
       },
     ],
     thinking: { type: 'disabled' },
@@ -256,6 +320,20 @@ export async function requestQuoteModel(rawPayload, options = {}) {
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 120));
     }
   }
+
+  if (payload.mode === 'hao' && comparable(payload.input).length <= 8) {
+    return {
+      data: {
+        output: makeCalibratedHaoQuote(payload),
+        source: '云端文字大模型 · 豪化校准',
+        serviceVersion: QUOTE_SERVICE_VERSION,
+        calibrated: true,
+      },
+      usage,
+      provider,
+    };
+  }
+
   throw lastError || new Error('云端语录生成暂时不可用');
 }
 
