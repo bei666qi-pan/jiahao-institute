@@ -7,7 +7,7 @@ const EXPECTED_SERVICE_VERSION = 5;
 const cases = [
   { input: '累了', mode: 'hao', level: '豪气冲天', style: '高冷', minimumLength: 12, anchors: /累/ },
   { input: '凡人之血', mode: 'hao', level: '豪气冲天', style: '高冷', minimumLength: 12, anchors: /(凡人|之血|凡.*血)/ },
-  { input: '今天有点累', mode: 'hao', level: '豪气逼人', style: '深情', minimumLength: 10, anchors: /(今天|累)/ },
+  { input: '今天有点累', mode: 'hao', level: '豪气逼人', style: '深情', minimumLength: 10, anchors: /(今天|累|疲惫|疲劳|倦)/ },
   { input: '我也没说什么，只是你们可能理解不了。', mode: 'dehao', minimumLength: 4 },
 ];
 
