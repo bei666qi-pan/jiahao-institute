@@ -1,0 +1,67 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-production.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: jiahao-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  trigger-coolify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      COOLIFY_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
+      COOLIFY_DEPLOY_URL: ${{ secrets.COOLIFY_DEPLOY_URL }}
+    steps:
+      - name: Resolve deployment webhook
+        id: webhook
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="${COOLIFY_DEPLOY_WEBHOOK:-${COOLIFY_DEPLOY_URL:-}}"
+          if [ -z "${url}" ]; then
+            echo '缺少 GitHub Actions Secret：COOLIFY_DEPLOY_WEBHOOK（兼容 COOLIFY_DEPLOY_URL）。' >&2
+            exit 1
+          fi
+          echo "url=${url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Trigger Coolify deployment
+        shell: bash
+        env:
+          DEPLOY_URL: ${{ steps.webhook.outputs.url }}
+        run: |
+          set -euo pipefail
+          response_code=$(curl --silent --show-error --location --max-time 30 \
+            --output /tmp/coolify-response.txt --write-out '%{http_code}' \
+            "${DEPLOY_URL}" || true)
+          echo "Coolify HTTP ${response_code}: $(cat /tmp/coolify-response.txt 2>/dev/null || true)"
+          case "${response_code}" in
+            200|201|202|204) ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Wait for deployed social API
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in $(seq 1 30); do
+            echo "=== deploy verification ${attempt}/30 ==="
+            code=$(curl --silent --show-error --location --max-time 20 \
+              --output /tmp/social.json --write-out '%{http_code}' \
+              https://jiahao.versecraft.cn/api/social/session || true)
+            echo "social HTTP ${code}: $(cat /tmp/social.json 2>/dev/null || true)"
+            if [ "${code}" = '200' ] \
+              && jq -e '.enabled == true and (.rooms | type == "array")' /tmp/social.json >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
