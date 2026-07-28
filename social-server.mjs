@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { server } from './server.mjs';
 import { Observability } from './server/observability.mjs';
-import { handleQuoteRequest } from './server/quote.mjs';
+import { handleQuoteRequest, QUOTE_SERVICE_VERSION } from './server/quote.mjs';
 import { SocialService, signSocialResult } from './server/social.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
@@ -27,24 +27,28 @@ const originalRequestHandler = server.listeners('request')[0];
 if (!originalRequestHandler) throw new Error('未找到原始 HTTP 请求处理器');
 server.removeAllListeners('request');
 
-function attachResultSignature(res) {
+function appendJsonFields(res, fields, predicate = () => true) {
   const originalEnd = res.end.bind(res);
   res.end = (chunk, encoding, callback) => {
     let output = chunk;
-    if (res.statusCode >= 200 && res.statusCode < 300 && chunk && signingSecret) {
+    if (res.statusCode >= 200 && res.statusCode < 300 && chunk) {
       try {
         const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
         const payload = JSON.parse(text);
-        if (payload && Number.isFinite(Number(payload.score)) && payload.dimensions) {
-          const resultToken = signSocialResult(payload, signingSecret);
-          if (resultToken) output = JSON.stringify({ ...payload, resultToken });
-        }
+        if (payload && predicate(payload)) output = JSON.stringify({ ...payload, ...fields(payload) });
       } catch {
-        // 非 JSON 或非鉴定响应保持原样。
+        // 非 JSON 响应保持原样。
       }
     }
     return originalEnd(output, encoding, callback);
   };
+}
+
+function attachResultSignature(res) {
+  appendJsonFields(res, (payload) => {
+    const resultToken = signingSecret ? signSocialResult(payload, signingSecret) : null;
+    return resultToken ? { resultToken } : {};
+  }, (payload) => Number.isFinite(Number(payload.score)) && payload.dimensions);
 }
 
 server.on('request', async (req, res) => {
@@ -52,6 +56,9 @@ server.on('request', async (req, res) => {
   if (await social.handle(req, res, url)) return;
   if (req.method === 'POST' && url.pathname === '/api/quote') {
     return handleQuoteRequest(req, res, maintenance);
+  }
+  if (req.method === 'GET' && url.pathname === '/healthz') {
+    appendJsonFields(res, () => ({ quoteServiceVersion: QUOTE_SERVICE_VERSION }));
   }
   if (req.method === 'POST' && url.pathname === '/api/analyze') attachResultSignature(res);
   return originalRequestHandler(req, res);

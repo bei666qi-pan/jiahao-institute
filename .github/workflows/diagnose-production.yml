@@ -22,6 +22,7 @@ jobs:
       url: ${{ inputs.production_url || vars.PRODUCTION_URL }}
     env:
       PRODUCTION_URL: ${{ inputs.production_url || vars.PRODUCTION_URL }}
+      EXPECTED_QUOTE_SERVICE_VERSION: '2'
     steps:
       - name: Validate production URL
         shell: bash
@@ -32,41 +33,59 @@ jobs:
             exit 1
           fi
 
-      - name: Wait for healthy production APIs
+      - name: Wait for the matching quote service release
         shell: bash
         run: |
           set -uo pipefail
-          passed=false
-          for attempt in $(seq 1 24); do
-            echo "=== production probe ${attempt}/24 ==="
+          ready=false
+          for attempt in $(seq 1 30); do
+            echo "=== release probe ${attempt}/30 ==="
             health_code=$(curl --silent --show-error --location --max-time 20 \
               --output /tmp/health.json --write-out '%{http_code}' \
               "${PRODUCTION_URL%/}/healthz" || true)
-            quote_code=$(curl --silent --show-error --location --max-time 55 \
-              --request POST \
-              --header 'Content-Type: application/json' \
-              --data '{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}' \
-              --output /tmp/quote.json --write-out '%{http_code}' \
-              "${PRODUCTION_URL%/}/api/quote" || true)
-            social_code=$(curl --silent --show-error --location --max-time 20 \
-              --cookie-jar /tmp/social.cookies \
-              --output /tmp/social.json --write-out '%{http_code}' \
-              "${PRODUCTION_URL%/}/api/social/session" || true)
-
             echo "health HTTP ${health_code}: $(cat /tmp/health.json 2>/dev/null || true)"
-            echo "quote HTTP ${quote_code}: $(cat /tmp/quote.json 2>/dev/null || true)"
-            echo "social HTTP ${social_code}: $(cat /tmp/social.json 2>/dev/null || true)"
-
-            if [ "${health_code}" = '200' ] && [ "${quote_code}" = '200' ] && [ "${social_code}" = '200' ] \
-              && jq -e '.status == "ok" and .textModelConfigured == true and .observability.databaseHealthy == true' /tmp/health.json >/dev/null 2>&1 \
-              && jq -e '.source == "云端文字大模型" and (.output | type == "string" and length > 1) and .output != "今天有点累。"' /tmp/quote.json >/dev/null 2>&1 \
-              && jq -e '.enabled == true and (.rooms | type == "array")' /tmp/social.json >/dev/null 2>&1; then
-              passed=true
+            if [ "${health_code}" = '200' ] \
+              && jq -e --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" \
+                '.status == "ok" and .textModelConfigured == true and .observability.databaseHealthy == true and .quoteServiceVersion == $version' \
+                /tmp/health.json >/dev/null 2>&1; then
+              ready=true
               break
             fi
             sleep 10
           done
-          test "${passed}" = 'true'
+          test "${ready}" = 'true'
+
+      - name: Verify repeated quote stability and social API
+        shell: bash
+        run: |
+          set -euo pipefail
+          quote_probe() {
+            local name="$1"
+            local payload="$2"
+            local original="$3"
+            local code
+            code=$(curl --silent --show-error --location --max-time 55 \
+              --request POST --header 'Content-Type: application/json' \
+              --data "${payload}" --output "/tmp/${name}.json" --write-out '%{http_code}' \
+              "${PRODUCTION_URL%/}/api/quote")
+            echo "${name} HTTP ${code}: $(cat "/tmp/${name}.json")"
+            test "${code}" = '200'
+            jq -e --arg original "${original}" --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" \
+              '.source == "云端文字大模型" and .serviceVersion == $version and (.output | type == "string" and length > 1) and .output != $original' \
+              "/tmp/${name}.json" >/dev/null
+          }
+
+          hao_payload='{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}'
+          quote_probe hao_first "${hao_payload}" '今天有点累。'
+          quote_probe hao_second "${hao_payload}" '今天有点累。'
+          quote_probe dehao '{"input":"我也没说什么，只是你们可能理解不了。","mode":"dehao","level":"豪气冲天","style":"高冷"}' '我也没说什么，只是你们可能理解不了。'
+
+          social_code=$(curl --silent --show-error --location --max-time 20 \
+            --cookie-jar /tmp/social.cookies --output /tmp/social.json --write-out '%{http_code}' \
+            "${PRODUCTION_URL%/}/api/social/session")
+          echo "social HTTP ${social_code}: $(cat /tmp/social.json)"
+          test "${social_code}" = '200'
+          jq -e '.enabled == true and (.rooms | type == "array")' /tmp/social.json >/dev/null
 
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
