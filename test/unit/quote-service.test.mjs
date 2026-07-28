@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assertQuoteQuality,
+  makeCalibratedHaoQuote,
   mergeQuoteUsage,
   normalizeQuotePayload,
   parseQuoteModelResponse,
@@ -22,7 +24,7 @@ function jsonResponse(body, status = 200) {
 }
 
 test('quote service exposes the current deployment version', () => {
-  assert.equal(QUOTE_SERVICE_VERSION, 3);
+  assert.equal(QUOTE_SERVICE_VERSION, 4);
 });
 
 test('normalizeQuotePayload validates and normalizes quote options', () => {
@@ -42,7 +44,7 @@ test('normalizeQuotePayload validates and normalizes quote options', () => {
 });
 
 test('parseQuoteModelResponse accepts JSON, array content and plain text', () => {
-  const payload = normalizeQuotePayload({ input: '今天有点累。', mode: 'hao' });
+  const payload = normalizeQuotePayload({ input: '我今天真的感觉有点累。', mode: 'hao' });
   const jsonOutput = parseQuoteModelResponse({
     choices: [{ message: { content: [{ type: 'text', text: '{"output":"身体会累，但我不会停。"}' }] } }],
   }, payload);
@@ -57,6 +59,16 @@ test('parseQuoteModelResponse accepts JSON, array content and plain text', () =>
     choices: [{ message: { content: '```text\n“身体会累，故事还没准备收场。”\n```' } }],
   }, payload);
   assert.equal(markdownOutput, '身体会累，故事还没准备收场。');
+});
+
+test('short dramatic fragments must be visibly expanded and retain their core image', () => {
+  const payload = normalizeQuotePayload({ input: '凡人之血', mode: 'hao', level: '豪气冲天', style: '高冷' });
+  assert.throws(() => assertQuoteQuality('凡人之血。', payload), /未完成改写|幅度不足/);
+  assert.throws(() => assertQuoteQuality('众生已经低头，而我依旧独自向前。', payload), /核心意象/);
+  assert.doesNotThrow(() => assertQuoteQuality('凡人之血，也配让我停下脚步？', payload));
+
+  const calibrated = makeCalibratedHaoQuote(payload);
+  assert.equal(calibrated, '凡人之血，也配让我停下脚步？');
 });
 
 test('parseQuoteModelResponse rejects unchanged output before display truncation', () => {
@@ -121,6 +133,61 @@ test('requestQuoteModel retries with a plain-text protocol when response_format 
   assert.equal(result.data.output, '不是累，只是今天的风有点重。');
   assert.equal(result.data.source, '云端文字大模型');
   assert.equal(result.data.serviceVersion, QUOTE_SERVICE_VERSION);
+});
+
+test('short inputs get an explicit expansion instruction and retry weak outputs', async () => {
+  const requests = [];
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    return jsonResponse({
+      choices: [{ message: { content: requests.length === 1
+        ? '{"output":"凡人之血。"}'
+        : '凡人之血，也配让我停下脚步？' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 6 },
+    });
+  };
+
+  const result = await requestQuoteModel({
+    input: '凡人之血',
+    mode: 'hao',
+    level: '豪气冲天',
+    style: '高冷',
+  }, { env, fetchImpl });
+
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].messages[1].content, /短句强制要求/);
+  assert.match(requests[0].messages[1].content, /至少 12 个有效字符/);
+  assert.equal(result.data.output, '凡人之血，也配让我停下脚步？');
+  assert.equal(result.data.source, '云端文字大模型');
+});
+
+test('short inputs receive a calibrated guaranteed rewrite after two weak model outputs', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return jsonResponse({
+      choices: [{ message: { content: calls === 1 ? '{"output":"凡人之血。"}' : '不过如此。' } }],
+      usage: { prompt_tokens: 8, completion_tokens: 4 },
+    });
+  };
+
+  const result = await requestQuoteModel({
+    input: '凡人之血',
+    mode: 'hao',
+    level: '豪气冲天',
+    style: '高冷',
+  }, { env, fetchImpl });
+
+  assert.equal(calls, 2);
+  assert.equal(result.data.output, '凡人之血，也配让我停下脚步？');
+  assert.equal(result.data.source, '云端文字大模型 · 豪化校准');
+  assert.equal(result.data.calibrated, true);
+  assert.deepEqual(result.usage, {
+    prompt_tokens: 16,
+    completion_tokens: 8,
+    total_tokens: 24,
+  });
 });
 
 test('requestQuoteModel accepts a provider plain-text response without a needless retry', async () => {

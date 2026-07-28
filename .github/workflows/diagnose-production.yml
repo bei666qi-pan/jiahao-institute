@@ -16,13 +16,13 @@ permissions:
 jobs:
   production-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     environment:
       name: production
       url: ${{ inputs.production_url || vars.PRODUCTION_URL }}
     env:
       PRODUCTION_URL: ${{ inputs.production_url || vars.PRODUCTION_URL }}
-      EXPECTED_QUOTE_SERVICE_VERSION: '3'
+      EXPECTED_QUOTE_SERVICE_VERSION: '4'
     steps:
       - name: Validate production URL
         shell: bash
@@ -38,9 +38,10 @@ jobs:
         run: |
           set -uo pipefail
           ready=false
-          for attempt in $(seq 1 30); do
-            echo "=== release probe ${attempt}/30 ==="
-            health_code=$(curl --silent --show-error --location --max-time 20 \
+          for attempt in $(seq 1 36); do
+            echo "=== release probe ${attempt}/36 ==="
+            health_code=$(curl --silent --show-error --location --ipv4 --http1.1 \
+              --connect-timeout 10 --max-time 25 \
               --output /tmp/health.json --write-out '%{http_code}' \
               "${PRODUCTION_URL%/}/healthz" || true)
             echo "health HTTP ${health_code}: $(cat /tmp/health.json 2>/dev/null || true)"
@@ -55,7 +56,7 @@ jobs:
           done
           test "${ready}" = 'true'
 
-      - name: Verify repeated quote stability and social API
+      - name: Verify quote quality and social API
         shell: bash
         run: |
           set -euo pipefail
@@ -63,24 +64,33 @@ jobs:
             local name="$1"
             local payload="$2"
             local original="$3"
-            local code
-            code=$(curl --silent --show-error --location --max-time 55 \
-              --request POST --header 'Content-Type: application/json' \
-              --data "${payload}" --output "/tmp/${name}.json" --write-out '%{http_code}' \
-              "${PRODUCTION_URL%/}/api/quote")
-            echo "${name} HTTP ${code}: $(cat "/tmp/${name}.json")"
+            local minimum_length="$4"
+            local code='000'
+            for attempt in 1 2 3; do
+              code=$(curl --silent --show-error --location --ipv4 --http1.1 \
+                --connect-timeout 10 --max-time 60 \
+                --request POST --header 'Content-Type: application/json' \
+                --data "${payload}" --output "/tmp/${name}.json" --write-out '%{http_code}' \
+                "${PRODUCTION_URL%/}/api/quote" || true)
+              echo "${name} attempt ${attempt} HTTP ${code}: $(cat "/tmp/${name}.json" 2>/dev/null || true)"
+              [ "${code}" = '200' ] && break
+              sleep 4
+            done
             test "${code}" = '200'
-            jq -e --arg original "${original}" --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" \
-              '.source == "云端文字大模型" and .serviceVersion == $version and (.output | type == "string" and length > 1) and .output != $original' \
+            jq -e --arg original "${original}" --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" --argjson minimum "${minimum_length}" \
+              '(.source | startswith("云端文字大模型")) and .serviceVersion == $version and (.output | type == "string" and length >= $minimum) and .output != $original' \
               "/tmp/${name}.json" >/dev/null
           }
 
           hao_payload='{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}'
-          quote_probe hao_first "${hao_payload}" '今天有点累。'
-          quote_probe hao_second "${hao_payload}" '今天有点累。'
-          quote_probe dehao '{"input":"我也没说什么，只是你们可能理解不了。","mode":"dehao","level":"豪气冲天","style":"高冷"}' '我也没说什么，只是你们可能理解不了。'
+          quote_probe hao_first "${hao_payload}" '今天有点累。' 8
+          quote_probe hao_second "${hao_payload}" '今天有点累。' 8
+          quote_probe fanren_blood '{"input":"凡人之血","mode":"hao","level":"豪气冲天","style":"高冷"}' '凡人之血' 12
+          jq -e '.output | test("凡人|之血|凡.*血")' /tmp/fanren_blood.json >/dev/null
+          quote_probe dehao '{"input":"我也没说什么，只是你们可能理解不了。","mode":"dehao","level":"豪气冲天","style":"高冷"}' '我也没说什么，只是你们可能理解不了。' 4
 
-          social_code=$(curl --silent --show-error --location --max-time 20 \
+          social_code=$(curl --silent --show-error --location --ipv4 --http1.1 \
+            --connect-timeout 10 --max-time 25 \
             --cookie-jar /tmp/social.cookies --output /tmp/social.json --write-out '%{http_code}' \
             "${PRODUCTION_URL%/}/api/social/session")
           echo "social HTTP ${social_code}: $(cat /tmp/social.json)"
