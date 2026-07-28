@@ -1,0 +1,36 @@
+name: Diagnose Production Quote
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  production-diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe health and quote endpoint
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo '=== /healthz ==='
+          health_code=$(curl --silent --show-error --location --max-time 20 \
+            --output /tmp/health.json --write-out '%{http_code}' \
+            https://jiahao.versecraft.cn/healthz || true)
+          echo "HTTP ${health_code}"
+          cat /tmp/health.json 2>/dev/null || true
+          echo
+
+          echo '=== /api/quote ==='
+          quote_code=$(curl --silent --show-error --location --max-time 55 \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data '{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}' \
+            --output /tmp/quote.json --write-out '%{http_code}' \
+            https://jiahao.versecraft.cn/api/quote || true)
+          echo "HTTP ${quote_code}"
+          cat /tmp/quote.json 2>/dev/null || true
+          echo
+
+          test "${health_code}" = '200'
