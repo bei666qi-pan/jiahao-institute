@@ -3,15 +3,6 @@ import './social.css';
 
 const SOCIAL_ROOT_ID = 'jiahao-social-root';
 const ROOM_PATH_RE = /^\/r\/([A-Z2-9]{6,10})\/?$/i;
-const DIMENSIONS = [
-  ['mystery', '神秘感'],
-  ['flex', '无意炫耀'],
-  ['niche', '小众优越'],
-  ['deep', '深情浓度'],
-  ['show', '镜头掌控'],
-  ['language', '豪言匹配'],
-];
-
 const state = {
   session: null,
   room: null,
@@ -105,7 +96,11 @@ async function loadRoom(code) {
   state.error = '';
   state.battle = null;
   render();
-  try { state.room = await api(`/api/social/rooms/${encodeURIComponent(code)}`); }
+  try {
+    const payload = await api(`/api/social/rooms/${encodeURIComponent(code)}`);
+    if (!payload?.room || !Array.isArray(payload.members)) throw new Error('好友榜服务暂时不可用');
+    state.room = payload;
+  }
   catch (error) { state.room = null; state.error = error.message; }
   state.loading = false;
   render();
@@ -142,9 +137,9 @@ function resultCard(result) {
 function homeView() {
   const result = latestResult();
   const rooms = state.session?.rooms || [];
-  return `<div class="social-panel social-home">
+  return `<div class="social-panel social-home" role="dialog" aria-modal="true" aria-labelledby="social-home-title">
     <div class="social-topbar">
-      <div><span class="social-kicker">WEB SOCIAL LAB</span><h2>好友豪气榜</h2><p>创建一个私密房间，把链接发到宿舍群或好友群。成员完成鉴定后自动排名。</p></div>
+      <div><span class="social-kicker">WEB SOCIAL LAB</span><h2 id="social-home-title">好友豪气榜</h2><p>创建一个私密房间，把链接发到宿舍群或好友群。成员完成鉴定后自动排名。</p></div>
       <button type="button" class="social-icon-button" data-action="close" aria-label="关闭好友榜">×</button>
     </div>
     ${state.error ? `<p class="social-error" role="alert">${escapeHtml(state.error)}</p>` : ''}
@@ -180,13 +175,13 @@ function homeView() {
 function leaderboardRows(members, canPk) {
   return members.map((member) => `<article class="social-rank-row ${member.isSelf ? 'is-self' : ''} ${member.rank <= 3 ? `is-top is-top-${member.rank}` : ''}">
     <div class="social-rank-number">${String(member.rank).padStart(2, '0')}</div>
+    <div class="social-member-avatar" aria-hidden="true">${escapeHtml(member.nickname.trim().slice(0, 1).toUpperCase() || '豪')}</div>
     <div class="social-member-main">
       <div class="social-member-title"><strong>${escapeHtml(member.nickname)}</strong>${member.isSelf ? '<em>我</em>' : ''}${member.verified ? '<i>云端可信</i>' : '<i class="is-basic">基础成绩</i>'}</div>
       <span>${escapeHtml(member.type)} · ${escapeHtml(member.level)}</span>
-      <div class="social-mini-bars">${DIMENSIONS.slice(0, 3).map(([key, label]) => `<div><small>${label}</small><span><i style="width:${Number(member.dimensions?.[key] || 0)}%"></i></span></div>`).join('')}</div>
     </div>
     <div class="social-score"><strong>${member.score}</strong><span>${rankLabel(member)}</span></div>
-    ${canPk && !member.isSelf ? `<button type="button" class="social-pk-button" data-pk-member="${escapeHtml(member.memberId)}">快速 PK</button>` : ''}
+    ${canPk && !member.isSelf ? `<button type="button" class="social-pk-button" data-pk-member="${escapeHtml(member.memberId)}">发起 PK</button>` : '<span class="social-pk-placeholder" aria-hidden="true"></span>'}
   </article>`).join('');
 }
 
@@ -196,23 +191,23 @@ function roomView() {
   const result = latestResult();
   const self = members.find((member) => member.isSelf);
   const expired = room.isExpired || room.status !== 'active';
-  return `<div class="social-panel social-room">
+  return `<div class="social-panel social-room" role="dialog" aria-modal="true" aria-labelledby="social-room-title">
     <div class="social-topbar">
-      <div><span class="social-kicker">ROOM / ${escapeHtml(room.code)}</span><h2>${escapeHtml(room.name)}</h2><p>${expired ? '本期好友榜已经结束，当前成绩只读展示。' : '云端可信成绩优先排名；同类成绩按嘉豪指数从高到低排序。'}</p></div>
+      <div><span class="social-kicker">ROOM / ${escapeHtml(room.code)}</span><h2 id="social-room-title">${escapeHtml(room.name)}</h2><p>${expired ? '本期好友榜已经结束，当前成绩只读展示。' : '云端可信成绩优先排名；同类成绩按嘉豪指数从高到低排序。'}</p></div>
       <button type="button" class="social-icon-button" data-action="close" aria-label="关闭好友榜">×</button>
     </div>
     ${state.error ? `<p class="social-error" role="alert">${escapeHtml(state.error)}</p>` : ''}
-    <div class="social-room-metrics">
-      <div><span>成员</span><strong>${room.memberCount}<small> / ${room.memberLimit}</small></strong></div>
-      <div><span>平均豪气</span><strong>${room.averageScore}</strong></div>
-      <div><span>最高纪录</span><strong>${room.highestScore}</strong></div>
-      <div><span>我的名次</span><strong>${self ? self.rank : '--'}</strong></div>
-    </div>
-    <div class="social-room-actions">
-      <button type="button" class="social-primary" data-action="share-room">邀请好友加入</button>
-      ${isMember && !expired ? '<button type="button" class="social-secondary" data-action="update-score">使用最新成绩</button>' : ''}
-      ${room.isOwner && !expired ? '<button type="button" class="social-danger" data-action="close-room">结束本期榜单</button>' : ''}
-      ${isMember && !room.isOwner && !expired ? '<button type="button" class="social-quiet" data-action="leave-room">退出榜单</button>' : ''}
+    <div class="social-room-summary">
+      <div class="social-room-metrics">
+        <div><span>平均豪气</span><strong>${room.averageScore}</strong></div>
+        <div><span>参与人数</span><strong>${room.memberCount}<small> / ${room.memberLimit}</small></strong></div>
+        <div><span>我的名次</span><strong>${self ? String(self.rank).padStart(2, '0') : '--'}</strong></div>
+      </div>
+      <div class="social-room-actions">
+        <button type="button" class="social-primary" data-action="share-room">邀请好友加入</button>
+        ${isMember && !expired ? '<button type="button" class="social-secondary" data-action="update-score">更新我的成绩</button>' : ''}
+        ${isMember && !room.isOwner && !expired ? '<button type="button" class="social-quiet" data-action="leave-room">退出榜单</button>' : ''}
+      </div>
     </div>
     ${!isMember && !expired ? `<section class="social-join-card">
       <div><h3>加入后查看你的排名</h3><p>好友只看到公开成绩，不会看到原始素材。</p></div>
@@ -220,9 +215,22 @@ function roomView() {
       <label>公开昵称<input id="social-join-nickname" maxlength="24" value="${escapeHtml(state.session?.nickname || '')}" placeholder="给自己起个榜内昵称" /></label>
       <button type="button" class="social-primary" data-action="join-room" ${result ? '' : 'disabled'}>使用当前成绩加入</button>
     </section>` : ''}
-    <div class="social-leaderboard">
-      <div class="social-list-heading"><strong>豪气排名</strong><span>${members.length ? `榜首 ${escapeHtml(members[0].nickname)}` : '等待首位成员'}</span></div>
-      ${members.length ? leaderboardRows(members, isMember && room.allowPk && !expired) : '<p class="social-muted">还没有成员加入。</p>'}
+    <div class="social-room-content">
+      <div class="social-leaderboard">
+        <div class="social-list-heading"><strong>豪气排名</strong><span>${members.length ? `榜首 ${escapeHtml(members[0].nickname)}` : '等待首位成员'}</span></div>
+        ${members.length ? leaderboardRows(members, isMember && room.allowPk && !expired) : '<p class="social-muted">还没有成员加入。</p>'}
+      </div>
+      <aside class="social-room-aside" aria-label="房间规则与隐私">
+        <h3>房间规则与隐私</h3>
+        <ul>
+          <li>本榜单仅限房间成员查看</li>
+          <li>云端可信成绩优先排名</li>
+          <li>同类成绩按嘉豪指数排序</li>
+          <li>原始素材与私密判词不会公开</li>
+          <li>成员可随时更新最新成绩</li>
+        </ul>
+        ${room.isOwner && !expired ? '<div class="social-owner-action"><span>榜单所有者操作</span><button type="button" class="social-danger" data-action="close-room">结束本期榜单</button></div>' : ''}
+      </aside>
     </div>
     <button type="button" class="social-back-link" data-action="social-home">查看我的其他好友榜</button>
   </div>`;
@@ -257,6 +265,7 @@ function render() {
     document.body.appendChild(root);
   }
   root.className = state.open ? 'is-open' : '';
+  document.body.classList.toggle('social-open', state.open);
   root.innerHTML = state.open ? `<div class="social-overlay">${state.loading ? loadingView() : routeCode() ? roomView() : homeView()}</div>${battleView()}` : '';
   bindActions(root);
 }
@@ -410,6 +419,13 @@ observer.observe(document.documentElement, { childList: true, subtree: true });
 installNavigation();
 installResultAction();
 window.addEventListener('popstate', () => void syncRoute());
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (state.battle) {
+    state.battle = null;
+    render();
+  } else if (state.open) closeSocial();
+});
 
 void (async () => {
   try { state.session = await api('/api/social/session'); }
