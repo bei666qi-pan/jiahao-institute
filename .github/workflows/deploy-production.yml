@@ -1,27 +1,68 @@
 name: Deploy Production
 
 on:
-  workflow_run:
-    workflows: [Full-chain E2E]
-    types: [completed]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: jiahao-production
   cancel-in-progress: true
 
 jobs:
+  gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run unit and integration tests
+        run: npm run test:all
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full-chain E2E
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-gate-playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-gate-test-results
+          path: test-results/
+          retention-days: 14
+
   deploy:
     name: Mirror and deploy
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main')
+    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
@@ -37,7 +78,7 @@ jobs:
       COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
       COOLIFY_API_KEY: ${{ secrets.COOLIFY_API_KEY }}
       COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
-      TARGET_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+      TARGET_SHA: ${{ github.sha }}
     steps:
       - name: Check required production configuration
         shell: bash
