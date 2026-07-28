@@ -8,6 +8,12 @@
   pointer-events: none !important;
 }
 
+/* CameraModal is rendered inside the assay grid. Lift that parent stacking
+   context so the fixed backdrop can actually sit above the sticky header. */
+.modal-open .assay-frame {
+  z-index: 2001 !important;
+}
+
 @media (max-width: 760px) {
   body {
     padding-bottom: 68px;
@@ -17,9 +23,26 @@
     position: sticky !important;
     top: 0;
     z-index: 800 !important;
-    grid-template-columns: 1fr auto !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    background: rgba(5, 10, 18, .98) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 
+  .site-header > .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .site-header > .header-cta {
+    position: relative;
+    z-index: 1;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* The header blur previously established a containing block, causing this
+     fixed navigation to anchor to the 62px header instead of the viewport. */
   .site-header nav {
     position: fixed;
     z-index: 900;
@@ -37,6 +60,7 @@
     border-radius: 0;
     background: rgba(5, 10, 18, .96);
     box-shadow: 0 -12px 34px rgba(0, 0, 0, .34);
+    -webkit-backdrop-filter: blur(20px) saturate(1.15);
     backdrop-filter: blur(20px) saturate(1.15);
   }
 
