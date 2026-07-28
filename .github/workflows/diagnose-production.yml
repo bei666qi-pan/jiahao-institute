@@ -1,0 +1,53 @@
+name: Production Quote Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for healthy production quote API
+        shell: bash
+        run: |
+          set -uo pipefail
+          passed=false
+          for attempt in $(seq 1 24); do
+            echo "=== production probe ${attempt}/24 ==="
+            health_code=$(curl --silent --show-error --location --max-time 20 \
+              --output /tmp/health.json --write-out '%{http_code}' \
+              https://jiahao.versecraft.cn/healthz || true)
+            quote_code=$(curl --silent --show-error --location --max-time 55 \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --data '{"input":"今天有点累。","mode":"hao","level":"豪气冲天","style":"高冷"}' \
+              --output /tmp/quote.json --write-out '%{http_code}' \
+              https://jiahao.versecraft.cn/api/quote || true)
+
+            echo "health HTTP ${health_code}: $(cat /tmp/health.json 2>/dev/null || true)"
+            echo "quote HTTP ${quote_code}: $(cat /tmp/quote.json 2>/dev/null || true)"
+
+            if [ "${health_code}" = '200' ] && [ "${quote_code}" = '200' ] \
+              && jq -e '.status == "ok" and .textModelConfigured == true' /tmp/health.json >/dev/null 2>&1 \
+              && jq -e '.output | type == "string" and length > 1' /tmp/quote.json >/dev/null 2>&1; then
+              passed=true
+              break
+            fi
+            sleep 10
+          done
+          test "${passed}" = 'true'
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Exercise production quote UI
+        run: node scripts/production-quote-smoke.mjs
