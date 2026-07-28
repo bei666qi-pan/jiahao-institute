@@ -50,6 +50,4 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Exercise production quote UI
-        env:
-          PRODUCTION_SMOKE: 'true'
-        run: npx playwright test test/e2e/production-quote.spec.js --project=chromium --reporter=line
+        run: node scripts/production-quote-smoke.mjs
