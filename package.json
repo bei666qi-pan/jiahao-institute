@@ -6,15 +6,15 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "test": "node --test test/unit/*.test.mjs test/core.test.mjs test/observability.test.mjs",
-    "test:unit": "node --test test/unit/*.test.mjs test/core.test.mjs test/observability.test.mjs",
+    "test": "node --check social-server.mjs && node --test test/unit/*.test.mjs test/core.test.mjs test/observability.test.mjs",
+    "test:unit": "node --check social-server.mjs && node --test test/unit/*.test.mjs test/core.test.mjs test/observability.test.mjs",
     "test:integration": "node --test test/integration/*.test.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
-    "test:all": "node --test test/unit/*.test.mjs test/core.test.mjs test/observability.test.mjs && node --test test/integration/*.test.mjs",
+    "test:all": "node --check social-server.mjs && node --test test/unit/*.test.mjs test/core.test.mjs test/observability.test.mjs && node --test test/integration/*.test.mjs",
     "test:coverage": "node test/helpers/ai-test-analyzer.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "start": "node server.mjs"
+    "start": "node social-server.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

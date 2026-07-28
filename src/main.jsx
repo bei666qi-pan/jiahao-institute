@@ -9,6 +9,7 @@ async function boot() {
   } else {
     ({ default: App } = await import('./App.jsx'));
     await import('./ui-upgrade.css');
+    await import('./mobile-navigation-fix.css');
   }
   ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
   if (!admin) {

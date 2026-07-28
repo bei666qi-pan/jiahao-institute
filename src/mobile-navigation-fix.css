@@ -1,0 +1,97 @@
+/* Mobile navigation and overlay reliability layer. */
+.modal-backdrop {
+  z-index: 2000 !important;
+}
+
+.modal-open .site-header,
+.modal-open .site-header * {
+  pointer-events: none !important;
+}
+
+/* CameraModal is rendered inside the assay grid. Lift that parent stacking
+   context so the fixed backdrop can actually sit above the sticky header. */
+.modal-open .assay-frame {
+  z-index: 2001 !important;
+}
+
+@media (max-width: 760px) {
+  body {
+    padding-bottom: 68px;
+  }
+
+  .site-header {
+    position: sticky !important;
+    top: 0;
+    z-index: 800 !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    background: rgba(5, 10, 18, .98) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .site-header > .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .site-header > .header-cta {
+    position: relative;
+    z-index: 1;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* The header blur previously established a containing block, causing this
+     fixed navigation to anchor to the 62px header instead of the viewport. */
+  .site-header nav {
+    position: fixed;
+    z-index: 900;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0 !important;
+    padding: 6px max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    border: 1px solid rgba(115, 215, 255, .2);
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: rgba(5, 10, 18, .96);
+    box-shadow: 0 -12px 34px rgba(0, 0, 0, .34);
+    -webkit-backdrop-filter: blur(20px) saturate(1.15);
+    backdrop-filter: blur(20px) saturate(1.15);
+  }
+
+  .site-header nav a,
+  .site-header nav button,
+  .site-header nav button.active {
+    min-width: 0;
+    min-height: 48px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 4px !important;
+    border: 0;
+    border-radius: 8px;
+    color: rgba(234, 242, 255, .58);
+    font-size: 11px !important;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .site-header nav button.active {
+    background: rgba(47, 123, 255, .18);
+    color: var(--blue);
+    box-shadow: inset 0 0 18px rgba(47, 123, 255, .1);
+  }
+
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .modal {
+    max-height: calc(100dvh - 16px);
+  }
+}
