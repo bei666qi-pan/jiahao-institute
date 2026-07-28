@@ -1,0 +1,110 @@
+name: Verify Fanren V4 Production
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - name: Wait for quote v4 and verify exact API input
+        shell: bash
+        env:
+          SITE_URL: https://jiahao.versecraft.cn
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in $(seq 1 60); do
+            code=$(curl -sS -L --ipv4 --http1.1 --connect-timeout 12 --max-time 30 \
+              -o /tmp/health.json -w '%{http_code}' "${SITE_URL}/healthz" || true)
+            echo "health ${attempt}/60 HTTP ${code}: $(cat /tmp/health.json 2>/dev/null || true)"
+            if [ "${code}" = 200 ] && jq -e '.status == "ok" and .quoteServiceVersion == 4' /tmp/health.json >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+          test "${ready}" = true
+
+          probe() {
+            local name="$1" level="$2" style="$3"
+            local payload code='000'
+            payload=$(jq -nc --arg input '凡人之血' --arg level "${level}" --arg style "${style}" \
+              '{input:$input,mode:"hao",level:$level,style:$style}')
+            for attempt in 1 2 3; do
+              code=$(curl -sS -L --ipv4 --http1.1 --connect-timeout 12 --max-time 70 \
+                -X POST -H 'Content-Type: application/json' --data "${payload}" \
+                -o "/tmp/${name}.json" -w '%{http_code}' "${SITE_URL}/api/quote" || true)
+              echo "${name} attempt ${attempt} HTTP ${code}: $(cat "/tmp/${name}.json" 2>/dev/null || true)"
+              [ "${code}" = 200 ] && break
+              sleep 5
+            done
+            test "${code}" = 200
+            jq -e '.serviceVersion == 4 and (.source | startswith("云端文字大模型")) and (.output | type == "string" and length >= 12) and .output != "凡人之血" and (.output | test("凡人|之血|凡.*血"))' "/tmp/${name}.json" >/dev/null
+          }
+
+          probe default '豪气冲天' '高冷'
+          probe repeat '豪气冲天' '高冷'
+          probe extreme '自在极意豪' '战斗'
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify exact browser interaction
+        env:
+          SITE_URL: https://jiahao.versecraft.cn
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from '@playwright/test';
+          const browser = await chromium.launch({ headless: true });
+          try {
+            const page = await browser.newPage();
+            let loaded = false;
+            let lastError;
+            for (let attempt = 1; attempt <= 3; attempt += 1) {
+              try {
+                await page.goto(process.env.SITE_URL, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+                loaded = true;
+                break;
+              } catch (error) {
+                lastError = error;
+                console.warn(`navigation ${attempt}/3 failed: ${error.message}`);
+              }
+            }
+            if (!loaded) throw lastError || new Error('production page unavailable');
+
+            await page.locator('.site-header nav button', { hasText: '语录生成器' }).click();
+            const input = page.getByLabel('要转换的原句');
+            const output = page.locator('.quote-output blockquote');
+            await input.fill('凡人之血');
+            const before = (await output.textContent())?.trim() || '';
+            const [response] = await Promise.all([
+              page.waitForResponse((candidate) => candidate.url().endsWith('/api/quote') && candidate.request().method() === 'POST', { timeout: 75_000 }),
+              page.locator('button.quote-generate').click(),
+            ]);
+            const body = await response.json();
+            await page.waitForFunction(
+              ({ expected }) => document.querySelector('.quote-output blockquote')?.textContent?.trim() === expected,
+              { expected: body.output },
+              { timeout: 12_000 },
+            );
+            const after = (await output.textContent())?.trim() || '';
+            console.log(JSON.stringify({ status: response.status(), body, before, after }, null, 2));
+            if (!response.ok()) throw new Error(`HTTP ${response.status()}`);
+            if (body.serviceVersion !== 4) throw new Error(`service version ${body.serviceVersion}`);
+            if (typeof body.source !== 'string' || !body.source.startsWith('云端文字大模型')) throw new Error(`source ${body.source}`);
+            if (after.length < 12 || after === '凡人之血' || !/(凡人|之血|凡.*血)/.test(after)) throw new Error(`weak output: ${after}`);
+            if (after === before) throw new Error('UI output did not change');
+          } finally {
+            await browser.close();
+          }
+          NODE
