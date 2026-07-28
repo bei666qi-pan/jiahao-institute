@@ -370,7 +370,8 @@ export class Observability {
         from jh_api_requests where occurred_at >= $1 and occurred_at < $2 group by endpoint order by estimated_cost_micros desc`, [range.start, range.end]),
     ]);
     const failed = results.filter((result) => result.status === 'rejected');
-    if (failed.length === results.length) throw failed[0].reason;
+    const hasSummary = results[0].status === 'fulfilled' || results[1].status === 'fulfilled';
+    if (!hasSummary) throw results[0].reason;
     const rows = (index) => results[index].status === 'fulfilled' ? results[index].value.rows : [];
     return {
       range: range.key,

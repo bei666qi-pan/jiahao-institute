@@ -69,3 +69,14 @@ test('cost analysis still surfaces a real database outage', async () => {
   observability.query = async () => { throw new Error('database offline'); };
   await assert.rejects(() => observability.costs('7d'), /database offline/);
 });
+
+test('cost analysis rejects endpoint-only data that cannot produce a truthful summary', async () => {
+  const observability = new Observability({});
+  let queryIndex = 0;
+  observability.query = async () => {
+    queryIndex += 1;
+    if (queryIndex < 3) throw new Error('summary aggregation failed');
+    return { rows: [{ endpoint: '/api/analyze', requests: '2', estimated_cost_micros: '1200' }] };
+  };
+  await assert.rejects(() => observability.costs('7d'), /summary aggregation failed/);
+});
