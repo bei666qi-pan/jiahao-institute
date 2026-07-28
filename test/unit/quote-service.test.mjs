@@ -44,7 +44,7 @@ test('normalizeQuotePayload validates and normalizes quote options', () => {
 });
 
 test('parseQuoteModelResponse accepts JSON, array content and plain text', () => {
-  const payload = normalizeQuotePayload({ input: '今天有点累。', mode: 'hao' });
+  const payload = normalizeQuotePayload({ input: '我今天真的感觉有点累。', mode: 'hao' });
   const jsonOutput = parseQuoteModelResponse({
     choices: [{ message: { content: [{ type: 'text', text: '{"output":"身体会累，但我不会停。"}' }] } }],
   }, payload);
@@ -64,7 +64,7 @@ test('parseQuoteModelResponse accepts JSON, array content and plain text', () =>
 test('short dramatic fragments must be visibly expanded and retain their core image', () => {
   const payload = normalizeQuotePayload({ input: '凡人之血', mode: 'hao', level: '豪气冲天', style: '高冷' });
   assert.throws(() => assertQuoteQuality('凡人之血。', payload), /未完成改写|幅度不足/);
-  assert.throws(() => assertQuoteQuality('众生低头，我自向前。', payload), /核心意象/);
+  assert.throws(() => assertQuoteQuality('众生已经低头，而我依旧独自向前。', payload), /核心意象/);
   assert.doesNotThrow(() => assertQuoteQuality('凡人之血，也配让我停下脚步？', payload));
 
   const calibrated = makeCalibratedHaoQuote(payload);
@@ -187,7 +187,6 @@ test('short inputs receive a calibrated guaranteed rewrite after two weak model 
     prompt_tokens: 16,
     completion_tokens: 8,
     total_tokens: 24,
-    prompt_tokens_details: { cached_tokens: 0 },
   });
 });
 
