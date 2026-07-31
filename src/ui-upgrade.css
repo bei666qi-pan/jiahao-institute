@@ -10,6 +10,11 @@
   --ui-radius-md: 16px;
   --ui-radius-lg: 24px;
   --ui-shadow: 0 24px 80px rgba(0, 0, 0, .26), 0 0 0 1px rgba(115, 215, 255, .05);
+  /* Concept-alignment tokens: luminous accents shared by every page */
+  --ui-cyan: #73d7ff;
+  --ui-glow: rgba(47, 123, 255, .32);
+  --ui-glow-soft: rgba(47, 123, 255, .14);
+  --ui-gradient-accent: linear-gradient(90deg, var(--signal), var(--ui-cyan));
 }
 
 body {
@@ -519,5 +524,297 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .quote-output blockquote {
     animation: none;
+  }
+}
+
+/* ── Concept alignment pass ─────────────────────────────────────
+   Visual direction from design/jiahao-concept-final.png and
+   design/jiahao-quote-generator-concept.png: luminous blue accents,
+   corner-ticked scan frames, glowing data tracks. DOM untouched. */
+
+/* Luminous primary CTA with sheen sweep */
+.primary-action {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2a74f2, #4d9bff 58%, #2f7bff);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, .26),
+    0 12px 34px rgba(47, 123, 255, .3),
+    0 0 22px rgba(47, 123, 255, .18);
+}
+
+.primary-action::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, .3) 50%, transparent 68%);
+  transform: translateX(-140%);
+  transition: transform .7s ease;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .primary-action:hover:not(:disabled)::after {
+    transform: translateX(140%);
+  }
+}
+
+.primary-action.is-loading::after {
+  display: none;
+}
+
+.primary-action > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Hero: atmospheric depth + corner-ticked scan frame */
+.hero-copy h1 {
+  text-shadow: 0 0 48px rgba(47, 123, 255, .22);
+}
+
+.hero-scan {
+  background:
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) left 16px top 16px / 24px 1.5px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) left 16px top 16px / 1.5px 24px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) right 16px top 16px / 24px 1.5px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) right 16px top 16px / 1.5px 24px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) left 16px bottom 16px / 24px 1.5px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) left 16px bottom 16px / 1.5px 24px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) right 16px bottom 16px / 24px 1.5px,
+    linear-gradient(rgba(115, 215, 255, .85), rgba(115, 215, 255, .85)) right 16px bottom 16px / 1.5px 24px,
+    radial-gradient(circle at 50% 46%, rgba(47, 123, 255, .28), transparent 45%),
+    var(--hero-image) center / cover no-repeat;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 100px rgba(47, 123, 255, .18),
+    0 24px 70px rgba(0, 0, 0, .34),
+    0 0 56px rgba(47, 123, 255, .12);
+}
+
+.pk-preview {
+  background-image:
+    radial-gradient(circle at 50% 46%, rgba(47, 123, 255, .2), transparent 45%);
+}
+
+/* Mode tabs: softer glow on the active tab */
+.mode-tabs button.active {
+  box-shadow:
+    inset 0 0 28px rgba(47, 123, 255, .16),
+    0 6px 22px rgba(47, 123, 255, .16);
+}
+
+/* Scale: gradient track with luminous ticks */
+.scale {
+  background: rgba(12, 22, 37, .44);
+  box-shadow: inset 0 0 40px rgba(47, 123, 255, .04);
+}
+
+.scale-line {
+  position: relative;
+  border-bottom-color: transparent;
+}
+
+.scale-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(115, 215, 255, .5), var(--signal) 62%, var(--ui-cyan));
+  box-shadow: 0 0 14px rgba(47, 123, 255, .38);
+}
+
+.scale-line i.hot {
+  border-color: var(--ui-cyan);
+  filter: drop-shadow(0 0 4px rgba(115, 215, 255, .55));
+}
+
+/* Result: gradient score, ambient panel, animated dimension bars */
+.score-block {
+  background:
+    radial-gradient(circle at 28% 16%, rgba(47, 123, 255, .15), transparent 56%),
+    rgba(12, 22, 37, .52);
+}
+
+.score > span {
+  background: linear-gradient(180deg, #9fd8ff 8%, var(--signal) 78%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 26px rgba(47, 123, 255, .3));
+}
+
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .score > span {
+    color: var(--signal);
+    filter: none;
+  }
+}
+
+.verdict {
+  border-color: rgba(115, 215, 255, .3);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(47, 123, 255, .05);
+  box-shadow: inset 0 0 30px rgba(47, 123, 255, .05);
+}
+
+.trait-signals span {
+  border-color: rgba(115, 215, 255, .3);
+  border-radius: 999px;
+}
+
+.dimension-list i {
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(234, 242, 255, .07);
+}
+
+.dimension-list i b {
+  border-radius: 999px;
+  background: var(--ui-gradient-accent);
+  box-shadow: 0 0 10px rgba(47, 123, 255, .45);
+  transform-origin: left;
+  animation: dim-grow .9s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.pk-dimensions i {
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.pk-dimensions b {
+  border-radius: 999px;
+  background: var(--ui-gradient-accent);
+  box-shadow: 0 0 10px rgba(47, 123, 255, .45);
+  transform-origin: left;
+  animation: dim-grow .9s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.dimension-list > div:nth-child(2) i b,
+.pk-dimensions > div:nth-child(2) b { animation-delay: .07s; }
+.dimension-list > div:nth-child(3) i b,
+.pk-dimensions > div:nth-child(3) b { animation-delay: .14s; }
+.dimension-list > div:nth-child(4) i b,
+.pk-dimensions > div:nth-child(4) b { animation-delay: .21s; }
+.dimension-list > div:nth-child(5) i b,
+.pk-dimensions > div:nth-child(5) b { animation-delay: .28s; }
+.dimension-list > div:nth-child(6) i b,
+.pk-dimensions > div:nth-child(6) b { animation-delay: .35s; }
+
+@keyframes dim-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.poster-mini {
+  box-shadow:
+    0 0 44px rgba(47, 123, 255, .22),
+    inset 0 0 60px rgba(47, 123, 255, .05);
+}
+
+/* Species gallery: deeper stage, livelier rail cards */
+.species-stage {
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .3),
+    0 0 40px rgba(47, 123, 255, .08);
+}
+
+.species-rail button {
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+.species-rail button:hover {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3), 0 0 18px rgba(47, 123, 255, .12);
+}
+
+/* Quote page: decorative quote mark + corner-plused share card */
+.quote-output blockquote {
+  position: relative;
+}
+
+.quote-output blockquote::before {
+  display: block;
+  content: "“";
+  position: absolute;
+  top: 4px;
+  left: 2px;
+  color: rgba(47, 123, 255, .3);
+  font: 900 130px/1 Georgia, serif;
+  pointer-events: none;
+}
+
+.share-card-preview > div {
+  background-image:
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(115, 215, 255, .7), rgba(115, 215, 255, .7)),
+    linear-gradient(rgba(47, 123, 255, .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 123, 255, .04) 1px, transparent 1px);
+  background-size:
+    12px 1.5px, 1.5px 12px,
+    12px 1.5px, 1.5px 12px,
+    12px 1.5px, 1.5px 12px,
+    12px 1.5px, 1.5px 12px,
+    30px 30px, 30px 30px;
+  background-position:
+    10px 10px, 10px 10px,
+    right 10px top 10px, right 10px top 10px,
+    left 10px bottom 10px, left 10px bottom 10px,
+    right 10px bottom 10px, right 10px bottom 10px,
+    0 0, 0 0;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 42px rgba(47, 123, 255, .05);
+}
+
+/* Footer: luminous top edge */
+footer {
+  border-top-color: rgba(115, 215, 255, .3);
+  box-shadow: 0 -1px 24px rgba(47, 123, 255, .1);
+}
+
+/* Mobile: keep the approval stamp clear of the giant score */
+@media (max-width: 760px) {
+  .approval-stamp {
+    position: static;
+    width: max-content;
+    height: auto;
+    margin: 6px 0 0 auto;
+    padding: 8px 12px;
+  }
+}
+
+/* Scroll reveal (driven by src/reveal.js; JS adds .reveal-ready) */
+@media (prefers-reduced-motion: no-preference) {
+  html.reveal-ready .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition:
+      opacity .6s ease,
+      transform .6s cubic-bezier(.16, 1, .3, 1);
+  }
+
+  html.reveal-ready .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dimension-list i b,
+  .pk-dimensions b {
+    animation: none;
+  }
+
+  .primary-action::after {
+    display: none;
   }
 }
