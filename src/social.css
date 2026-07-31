@@ -206,12 +206,13 @@ body.social-open {
   width: 100%;
   min-width: 0;
   border: 1px solid rgba(115, 215, 255, 0.22);
-  border-radius: 0;
+  border-radius: 10px;
   background: #050911;
   color: #eaf2ff;
   padding: 13px 14px;
   font: inherit;
   outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .social-card input:focus,
@@ -235,10 +236,11 @@ body.social-open {
 .social-back-link,
 .social-empty-result button {
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: 10px;
   padding: 13px 17px;
   font-weight: 800;
   cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease, opacity 150ms ease;
 }
 
 .social-primary {
@@ -970,5 +972,396 @@ body.social-open {
 
   .social-versus > div > strong {
     font-size: 54px;
+  }
+}
+
+/* ============================================================
+   Visual polish pass (concept alignment)
+   Radius system: cards 16px, controls 10px, chips pill.
+   Only transform/opacity/box-shadow/border-color/background
+   are animated below.
+   ============================================================ */
+
+/* Panel atmosphere: radial signal glow + layered edge */
+.social-panel {
+  border-radius: 16px;
+  border-color: rgba(115, 215, 255, 0.3);
+  background:
+    radial-gradient(960px 480px at 50% -8%, rgba(47, 123, 255, 0.15), transparent 62%),
+    radial-gradient(760px 460px at 92% 108%, rgba(115, 215, 255, 0.07), transparent 60%),
+    linear-gradient(rgba(47, 123, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 123, 255, 0.045) 1px, transparent 1px),
+    #070b12;
+  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+  box-shadow:
+    inset 0 1px 0 rgba(115, 215, 255, 0.16),
+    inset 0 0 0 1px rgba(47, 123, 255, 0.06),
+    0 24px 90px rgba(2, 6, 14, 0.62),
+    0 0 120px rgba(47, 123, 255, 0.08);
+}
+
+/* Ceremonial header: glowing divider + title halo */
+.social-topbar {
+  position: relative;
+  border-bottom: 0;
+  padding-bottom: 28px;
+}
+
+.social-topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(115, 215, 255, 0.55), rgba(47, 123, 255, 0.55), transparent);
+}
+
+.social-topbar h2,
+.social-state h2,
+.social-share-card h2,
+.social-battle h2 {
+  text-shadow: 0 0 34px rgba(47, 123, 255, 0.35);
+}
+
+.social-kicker {
+  text-shadow: 0 0 12px rgba(115, 215, 255, 0.45);
+}
+
+.social-icon-button {
+  border-radius: 10px;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.social-icon-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 18px rgba(115, 215, 255, 0.25);
+}
+
+/* Cards adopt the 16px card radius */
+.social-card,
+.social-join-card,
+.social-room-summary,
+.social-leaderboard,
+.social-room-aside {
+  border-radius: 16px;
+}
+
+.social-card,
+.social-join-card {
+  box-shadow: inset 0 1px 0 rgba(115, 215, 255, 0.08);
+}
+
+/* Room metrics: oversized gradient numerals with halo */
+.social-room-metrics strong {
+  text-shadow: none;
+  filter: drop-shadow(0 0 18px rgba(47, 123, 255, 0.38));
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .social-room-metrics strong {
+    background: linear-gradient(180deg, #9fd8ff 0%, #2f7bff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+.social-room-metrics span {
+  letter-spacing: 0.14em;
+}
+
+/* Rank rows: lift + glow on hover */
+.social-rank-row {
+  border-radius: 10px;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.social-rank-row:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(47, 123, 255, 0.14);
+}
+
+/* Self row: gradient wash + inner/outer glow */
+.social-rank-row.is-self {
+  border-radius: 12px;
+  border-color: rgba(115, 215, 255, 0.65);
+  background: linear-gradient(90deg, rgba(47, 123, 255, 0.2), rgba(47, 123, 255, 0.07) 55%, rgba(115, 215, 255, 0.05));
+  box-shadow:
+    inset 0 0 0 1px rgba(115, 215, 255, 0.22),
+    inset 0 0 34px rgba(47, 123, 255, 0.16),
+    0 0 28px rgba(47, 123, 255, 0.2);
+}
+
+/* Podium numerals: solid fallbacks, gradient overlays below */
+.social-rank-row.is-top-2 .social-rank-number,
+.social-rank-row.is-top-3 .social-rank-number {
+  color: #8ec9ff;
+  text-shadow: 0 0 14px rgba(90, 168, 255, 0.3);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .social-rank-row.is-top-1 .social-rank-number {
+    background: linear-gradient(180deg, #ffe9ad 0%, #ffd166 55%, #e8a93c 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 12px rgba(255, 209, 102, 0.45));
+  }
+
+  .social-rank-row.is-top-2 .social-rank-number,
+  .social-rank-row.is-top-3 .social-rank-number {
+    background: linear-gradient(180deg, #cfe9ff 0%, #5aa8ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 10px rgba(90, 168, 255, 0.35));
+  }
+}
+
+/* Scores: tabular feel + soft halo, gold for the leader */
+.social-score strong {
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px rgba(115, 215, 255, 0.22);
+}
+
+.social-rank-row.is-top-1 .social-score strong {
+  color: #ffe1a1;
+  text-shadow: 0 0 22px rgba(255, 209, 102, 0.35);
+}
+
+.social-rank-row.is-top-1 {
+  box-shadow: inset 0 0 26px rgba(255, 188, 64, 0.05);
+}
+
+/* Avatars and verified marks */
+.social-member-avatar {
+  box-shadow:
+    0 0 14px rgba(47, 123, 255, 0.18),
+    inset 0 0 10px rgba(115, 215, 255, 0.12);
+}
+
+.is-top-1 .social-member-avatar {
+  box-shadow:
+    0 0 16px rgba(255, 209, 102, 0.3),
+    inset 0 0 10px rgba(255, 209, 102, 0.14);
+}
+
+.social-member-title i::before {
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(47, 140, 255, 0.6);
+}
+
+.social-member-title i.is-basic::before {
+  box-shadow: none;
+}
+
+/* Luminous primary CTA */
+.social-primary {
+  border-color: rgba(159, 216, 255, 0.35);
+  background: linear-gradient(180deg, #4d9bff 0%, #2a74f2 55%, #2f7bff 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -8px 18px rgba(10, 40, 110, 0.35),
+    0 10px 28px rgba(47, 123, 255, 0.38);
+  text-shadow: 0 1px 2px rgba(6, 20, 50, 0.45);
+}
+
+.social-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(159, 216, 255, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -8px 18px rgba(10, 40, 110, 0.3),
+    0 14px 36px rgba(47, 123, 255, 0.52);
+}
+
+.social-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -6px 14px rgba(10, 40, 110, 0.4),
+    0 6px 18px rgba(47, 123, 255, 0.34);
+}
+
+/* Secondary: quiet glass with matching lift */
+.social-secondary,
+.social-empty-result button {
+  border-color: rgba(115, 215, 255, 0.42);
+  background: rgba(47, 123, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(115, 215, 255, 0.12);
+}
+
+.social-secondary:hover:not(:disabled),
+.social-empty-result button:hover {
+  transform: translateY(-1px);
+  border-color: #73d7ff;
+  background: rgba(47, 123, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(115, 215, 255, 0.18),
+    0 8px 22px rgba(47, 123, 255, 0.22);
+}
+
+/* Danger keeps the red family with the same finish */
+.social-danger {
+  background: linear-gradient(180deg, rgba(255, 118, 87, 0.16), rgba(255, 118, 87, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 154, 128, 0.2);
+}
+
+.social-danger:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 118, 87, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 154, 128, 0.28),
+    0 8px 22px rgba(255, 118, 87, 0.18);
+}
+
+.social-quiet:hover,
+.social-back-link:hover {
+  color: #9fd8ff;
+  opacity: 1;
+}
+
+.social-pk-button {
+  border-radius: 10px;
+  transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.social-pk-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 14px rgba(47, 123, 255, 0.2);
+}
+
+/* Chips go fully round */
+.social-result-chip,
+.social-battle-tags span {
+  border-radius: 999px;
+}
+
+.social-battle-tags span {
+  background: rgba(47, 123, 255, 0.07);
+}
+
+.social-error,
+.social-empty-result,
+.social-privacy-note {
+  border-radius: 12px;
+}
+
+.social-privacy-note {
+  border-radius: 0 12px 12px 0;
+}
+
+/* History room links: subtle lift */
+.social-room-link {
+  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.social-room-link:hover {
+  background: rgba(47, 123, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(115, 215, 255, 0.08);
+}
+
+/* Aside: glowing divider + breathing rhythm */
+.social-room-aside ul {
+  gap: 18px;
+}
+
+.social-room-aside li {
+  transition: opacity 150ms ease;
+}
+
+.social-owner-action {
+  position: relative;
+  border-top: 0;
+  padding-top: 22px;
+}
+
+.social-owner-action::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(115, 215, 255, 0.4), transparent);
+}
+
+/* Share card and battle dialog share the panel glow language */
+.social-share-card,
+.social-battle {
+  border-radius: 16px;
+  background:
+    radial-gradient(560px 300px at 50% -10%, rgba(47, 123, 255, 0.16), transparent 65%),
+    #070b12;
+  box-shadow:
+    inset 0 1px 0 rgba(115, 215, 255, 0.14),
+    0 30px 90px rgba(2, 6, 14, 0.6),
+    0 0 90px rgba(47, 123, 255, 0.12);
+}
+
+.social-share-card img {
+  border-radius: 14px;
+  box-shadow: 0 0 40px rgba(47, 123, 255, 0.18);
+}
+
+.social-versus > div {
+  border-radius: 12px;
+  background: rgba(8, 15, 27, 0.7);
+  box-shadow: inset 0 1px 0 rgba(115, 215, 255, 0.08);
+}
+
+.social-versus > div > strong {
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 26px rgba(115, 215, 255, 0.3);
+}
+
+.social-versus > em {
+  text-shadow: 0 0 16px rgba(47, 123, 255, 0.5);
+}
+
+/* Mobile sanity: full-bleed panel stays square-edged */
+@media (max-width: 760px) {
+  .social-panel {
+    border-radius: 0;
+  }
+
+  .social-rank-row:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* Reduced motion: disable every animation/transition added above */
+@media (prefers-reduced-motion: reduce) {
+  .social-primary,
+  .social-secondary,
+  .social-danger,
+  .social-quiet,
+  .social-back-link,
+  .social-pk-button,
+  .social-icon-button,
+  .social-room-link,
+  .social-room-aside li,
+  .social-card input,
+  .social-card select,
+  .social-join-card input {
+    transition: none;
+  }
+
+  .social-primary:hover:not(:disabled),
+  .social-primary:active:not(:disabled),
+  .social-secondary:hover:not(:disabled),
+  .social-empty-result button:hover,
+  .social-danger:hover,
+  .social-pk-button:hover,
+  .social-icon-button:hover,
+  .social-rank-row:hover {
+    transform: none;
   }
 }

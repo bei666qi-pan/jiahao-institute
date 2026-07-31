@@ -15,6 +15,8 @@ async function boot() {
   if (!admin) {
     const { startTelemetry } = await import('./telemetry.js');
     startTelemetry();
+    const { startReveal } = await import('./reveal.js');
+    startReveal();
   }
 }
 
