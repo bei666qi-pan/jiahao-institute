@@ -67,6 +67,11 @@ async function enterAssay(page) {
   await expect(page.getByRole('tablist', { name: '鉴定方式' })).toBeVisible();
 }
 
+async function enterQuoteGenerator(page) {
+  await page.getByRole('button', { name: '语录生成器', exact: true }).click();
+  await expect(page.getByRole('region', { name: '嘉豪语录生成工作台' })).toBeVisible();
+}
+
 async function completeTextAssay(page) {
   await enterAssay(page);
   await page.getByRole('tab', { name: '文字鉴定' }).click();
@@ -80,12 +85,14 @@ test.describe('嘉豪鉴定所全链路', () => {
   test.beforeEach(async ({ page }) => {
     await mockApis(page);
     await page.goto('/');
+    await page.evaluate(() => window.scrollTo(0, 0));
     await expect(page.locator('#root')).toBeVisible();
   });
 
   test('导航、图鉴与历史弹窗', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: '把一句普通话，调成嘉豪频道。' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '鉴定', exact: true })).toHaveAttribute('aria-current', 'page');
     await enterAssay(page);
+    await expect(page.locator('.hero h1')).toHaveText(/你身上，\s*到底有多少豪气？/);
     await page.getByRole('button', { name: '图鉴', exact: true }).click();
     await expect(page.getByRole('heading', { name: '嘉豪物种图鉴' })).toBeVisible();
     await page.getByRole('listitem', { name: '查看计算机嘉豪' }).click();
@@ -127,7 +134,7 @@ test.describe('嘉豪鉴定所全链路', () => {
     await page.getByRole('button', { name: /开始豪气 PK/ }).click();
     await expect(page.getByRole('heading', { name: '选手 A 胜出' })).toBeVisible({ timeout: 8_000 });
 
-    await page.getByRole('button', { name: '语录生成器', exact: true }).click();
+    await enterQuoteGenerator(page);
     await page.getByLabel('要转换的原句').fill('今天有点累');
     await page.getByRole('button', { name: /生成嘉豪语录/ }).click();
     await expect(page.locator('.quote-output blockquote')).toHaveText('不是累，只是有些路，不需要所有人理解。');
@@ -142,6 +149,7 @@ test.describe('嘉豪鉴定所全链路', () => {
       if (request.url().endsWith('/api/quote')) quoteRequests += 1;
     });
 
+    await enterQuoteGenerator(page);
     const input = page.getByLabel('要转换的原句');
     const output = page.locator('.quote-output blockquote');
     const outputMeta = page.locator('.quote-output > header span');

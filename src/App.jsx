@@ -994,7 +994,7 @@ function HistoryModal({ history, onClose, onSelect, onClear }) {
 }
 
 export default function App() {
-  const [page, setPage] = useState('quotes');
+  const [page, setPage] = useState('assay');
   const [assayMode, setAssayMode] = useState('photo');
   const [result, setResult] = useState(null);
   const [posterOpen, setPosterOpen] = useState(false);
