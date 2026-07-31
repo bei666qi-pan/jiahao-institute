@@ -490,12 +490,12 @@ async function makePkPoster(result) {
   return canvas.toDataURL('image/png');
 }
 
-function Header({ page, onNavigate, onHistory }) {
+function Header({ page, onNavigate, onAssay, onHistory }) {
   return (
     <header className="site-header">
-      <button className="brand" onClick={() => onNavigate('assay')} aria-label="返回鉴定首页"><span>嘉豪</span>鉴定所</button>
+      <button className="brand" onClick={onAssay} aria-label="返回鉴定首页"><span>嘉豪</span>鉴定所</button>
       <nav aria-label="主导航">
-        <button className={page === 'assay' ? 'active' : ''} aria-current={page === 'assay' ? 'page' : undefined} onClick={() => onNavigate('assay')}>鉴定</button>
+        <button className={page === 'assay' ? 'active' : ''} aria-current={page === 'assay' ? 'page' : undefined} onClick={onAssay}>鉴定</button>
         <button className={page === 'quotes' ? 'active' : ''} aria-current={page === 'quotes' ? 'page' : undefined} onClick={() => onNavigate('quotes')}>语录生成器</button>
         <button onClick={() => { onNavigate('assay'); window.setTimeout(() => document.querySelector('#species')?.scrollIntoView({ behavior: 'smooth' }), 0); }}>图鉴</button>
       </nav>
@@ -631,7 +631,7 @@ function AssayForm({ onResult, addHistory, mode, onModeChange }) {
     window.setTimeout(() => { window.clearInterval(timer); addHistory(result); setAnalyzing(false); onResult(result); window.scrollTo({ top: 0, behavior: 'smooth' }); }, remainingDelay);
   };
   return (
-    <div className={`assay-frame ${mode === 'pk' ? 'pk-assay' : ''}`} id="assay">
+    <div className={`assay-frame ${mode === 'pk' ? 'pk-assay' : ''}`}>
       <div className="mode-tabs" role="tablist" aria-label="鉴定方式">
         {MODES.map((item) => <button key={item.id} role="tab" aria-selected={mode === item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item.id)}><Icon name={item.id === 'text' ? 'text' : item.id === 'photo' ? 'image' : item.id === 'chat' ? 'chat' : 'sword'} size={19} />{item.label}</button>)}
       </div>
@@ -679,7 +679,7 @@ function Scale() {
 function Home({ onResult, addHistory, mode, onModeChange }) {
   return (
     <main>
-      <section className={`hero ${mode === 'pk' ? 'hero-pk' : ''}`}>
+      <section className={`hero ${mode === 'pk' ? 'hero-pk' : ''}`} id="assay">
         <div className="hero-copy">
           <div className="scan-marker" aria-hidden="true">{mode === 'pk' ? '豪气目标 // 双人PK' : '豪气目标 // 已锁定'}</div>
           <h1>{mode === 'pk' ? <>双人对决，<br />谁更豪气？</> : <>你身上，<br />到底有多少豪气？</>}</h1>
@@ -858,13 +858,24 @@ function SpeciesGallery({ selected }) {
   const activeRef = useRef(active);
   const item = SPECIES[active];
   useEffect(() => { activeRef.current = active; }, [active]);
+  const centerRailCard = (index, smooth) => {
+    const rail = railRef.current;
+    const card = rail?.children[index];
+    if (!rail || !card) return;
+    // Keep the scroll inside the rail: scrollIntoView would also drag the
+    // whole page down to the gallery on first load.
+    rail.scrollTo({
+      left: card.offsetLeft - (rail.clientWidth - card.clientWidth) / 2,
+      behavior: smooth ? 'smooth' : 'auto',
+    });
+  };
   useEffect(() => {
-    const frame = requestAnimationFrame(() => railRef.current?.children[active]?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+    const frame = requestAnimationFrame(() => centerRailCard(active, false));
     return () => cancelAnimationFrame(frame);
   }, []);
   const selectSpecies = (index) => {
     setActive(index);
-    railRef.current?.children[index]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    centerRailCard(index, true);
   };
   const syncSpeciesFromRail = () => {
     const rail = railRef.current;
@@ -999,16 +1010,26 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [posterOpen, setPosterOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [assayScrollRequest, setAssayScrollRequest] = useState(0);
   const { history, add, clear } = useHistory();
   const year = useMemo(() => new Date().getFullYear(), []);
+  useEffect(() => {
+    if (!assayScrollRequest || page !== 'assay' || result) return;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [assayScrollRequest, page, result]);
   const navigate = (nextPage) => {
     setPage(nextPage);
     if (nextPage !== 'assay') setResult(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const navigateToAssay = () => {
+    setPage('assay');
+    setResult(null);
+    setAssayScrollRequest((request) => request + 1);
+  };
   return (
     <div className="app-shell">
-      <Header page={page} onNavigate={navigate} onHistory={() => setHistoryOpen(true)} />
+      <Header page={page} onNavigate={navigate} onAssay={navigateToAssay} onHistory={() => setHistoryOpen(true)} />
       {page === 'quotes' ? <QuoteGenerator /> : result ? (result.kind === 'pk' ? <PkResult result={result} onReset={() => { setAssayMode('pk'); setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} /> : <Result result={result} onReset={() => { setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onPoster={() => setPosterOpen(true)} />) : <Home onResult={setResult} addHistory={add} mode={assayMode} onModeChange={setAssayMode} />}
       <footer><strong>嘉豪鉴定所</strong><span>© {year} 嘉豪鉴定开源实验项目</span><span>大模型娱乐生成 · 本站不保存内容 · 不构成任何事实判断</span></footer>
       {posterOpen && <PosterModal result={result} onClose={() => setPosterOpen(false)} />}
