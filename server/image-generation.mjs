@@ -1,4 +1,5 @@
 const ALLOWED_RATIOS = new Set(['1:1', '3:4', '16:9']);
+export const IMAGE_PROVIDER_TIMEOUTS = Object.freeze({ minimax: 45_000, volcengine: 90_000 });
 // Seedream 5.0 Lite requires at least 3,686,400 output pixels.
 const SIZE_BY_RATIO = { '1:1': '2048x2048', '3:4': '1728x2304', '16:9': '2560x1440' };
 const SCENES = {
@@ -54,9 +55,9 @@ function providerError(provider, status, details = '') {
   });
 }
 
-async function postImage(provider, url, key, body, fetchImpl) {
+async function postImage(provider, url, key, body, fetchImpl, timeoutMs = IMAGE_PROVIDER_TIMEOUTS[provider]) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, {
       method: 'POST',
@@ -91,7 +92,7 @@ function imageResult(provider, model, data, fallback) {
     id: String(data?.id || `${provider}-${Date.now()}`),
     provider,
     model,
-    source: provider === 'minimax' ? 'MiniMax 图片生成' : fallback.used ? '火山引擎图片生成 · 自动降级' : '火山引擎图片生成',
+    source: `${provider === 'minimax' ? 'MiniMax 图片生成' : '火山引擎图片生成'}${fallback.used ? ' · 自动降级' : ''}`,
     ...(base64 ? { imageDataUrl: `data:image/jpeg;base64,${base64}` } : { imageUrl }),
     fallback,
   };
@@ -190,25 +191,30 @@ export async function generateAbstractImage(payload, config, fetchImpl = fetch) 
   const quality = config?.quality || {};
   const referenceImageUrl = config?.referenceImageUrl || '';
 
-  const generateVolcengine = async (fallback) => {
+  const generateVolcengine = async (fallback = { used: false }) => {
     const result = await callVolcengine(request, volcengine, referenceImageUrl, fetchImpl, fallback);
     await assertImageIdentity(result, quality, fetchImpl);
     return { ...result, aspectRatio: request.aspectRatio };
   };
 
-  if (minimax.key) {
+  const generateMinimax = async (fallback = { used: false }) => {
+    const result = await callMinimax(request, minimax, referenceImageUrl, fetchImpl);
+    const tagged = { ...result, fallback, source: `MiniMax 图片生成${fallback.used ? ' · 自动降级' : ''}` };
+    await assertImageIdentity(tagged, quality, fetchImpl);
+    return { ...tagged, aspectRatio: request.aspectRatio };
+  };
+
+  if (volcengine.key) {
     try {
-      const result = await callMinimax(request, minimax, referenceImageUrl, fetchImpl);
-      await assertImageIdentity(result, quality, fetchImpl);
-      return { ...result, aspectRatio: request.aspectRatio };
+      return await generateVolcengine();
     } catch (error) {
       if (!error?.fallbackEligible) throw error;
-      if (!volcengine.key) throw error;
+      if (!minimax.key) throw error;
       const reason = String(error.code || 'provider_failed').toLowerCase();
-      return generateVolcengine({ used: true, from: 'minimax', reason });
+      return generateMinimax({ used: true, from: 'volcengine', reason });
     }
   }
 
-  if (!volcengine.key) throw new ImageGenerationError('图片生成服务尚未配置', { statusCode: 503, code: 'NOT_CONFIGURED' });
-  return generateVolcengine({ used: true, from: 'minimax', reason: 'not_configured' });
+  if (!minimax.key) throw new ImageGenerationError('图片生成服务尚未配置', { statusCode: 503, code: 'NOT_CONFIGURED' });
+  return generateMinimax({ used: true, from: 'volcengine', reason: 'not_configured' });
 }

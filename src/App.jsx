@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Icon } from './components/Icon';
 import { postJson } from './app/api';
-import { createImageGenerationTask } from './app/imageGenerationTask';
+import { IMAGE_GENERATION_REQUEST_TIMEOUT_MS, createImageGenerationTask } from './app/imageGenerationTask';
 import { useAssessmentHistory } from './app/useAssessmentHistory';
 import { AssayPage } from './features/assay/AssayPage';
 import { ResultPage } from './features/result/ResultPage';
@@ -48,7 +48,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState(initialRoomCode);
   const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'assay');
   const [result, setResult] = useState(null);
-  const imageTask = useMemo(() => createImageGenerationTask((input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(100_000) })), []);
+  const imageTask = useMemo(() => createImageGenerationTask((input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(IMAGE_GENERATION_REQUEST_TIMEOUT_MS) })), []);
   const imageJob = useSyncExternalStore(imageTask.subscribe, imageTask.getSnapshot, imageTask.getSnapshot);
   const { history, add, clear } = useAssessmentHistory();
   const latestResult = useMemo(() => result || history.find((item) => item && item.kind !== 'pk') || null, [result, history]);

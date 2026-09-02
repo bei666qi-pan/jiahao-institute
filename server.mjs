@@ -373,7 +373,7 @@ export const server = createServer(async (req, res) => {
       imageGeneration: {
         minimaxConfigured: Boolean(IMAGE_CONFIG.minimax.key),
         volcengineConfigured: Boolean(IMAGE_CONFIG.volcengine.key),
-        priority: ['minimax', 'volcengine'],
+        priority: ['volcengine', 'minimax'],
       },
       observability: observability.status(),
     });

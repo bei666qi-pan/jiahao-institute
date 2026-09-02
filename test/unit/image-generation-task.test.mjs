@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createImageGenerationTask } from '../../src/app/imageGenerationTask.js';
+import { IMAGE_GENERATION_REQUEST_TIMEOUT_MS, createImageGenerationTask } from '../../src/app/imageGenerationTask.js';
+
+test('the browser request outlives a primary timeout plus fallback generation', () => {
+  assert.equal(IMAGE_GENERATION_REQUEST_TIMEOUT_MS, 240_000);
+});
 
 test('图片生成任务在没有页面订阅时仍会完成并保留结果', async () => {
   let finish;

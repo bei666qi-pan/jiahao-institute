@@ -7,6 +7,8 @@ const INITIAL_SNAPSHOT = Object.freeze({
   completedAt: null,
 });
 
+export const IMAGE_GENERATION_REQUEST_TIMEOUT_MS = 240_000;
+
 export function createImageGenerationTask(request) {
   if (typeof request !== 'function') throw new TypeError('request must be a function');
   let snapshot = INITIAL_SNAPSHOT;
