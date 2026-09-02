@@ -25,7 +25,24 @@ function loadImage(src) {
   });
 }
 
+export function battleCardLayout() {
+  return {
+    hero: { x: 62, y: 270, width: 620, height: 790 },
+    scores: { x: 720, y: 210, width: 292, height: 460 },
+    verdict: { x: 650, y: 710, width: 362, height: 350 },
+    qr: { x: 72, y: 1178, width: 174, height: 174 },
+  };
+}
+
+function drawImageContain(ctx, image, rect) {
+  const scale = Math.min(rect.width / image.width, rect.height / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  ctx.drawImage(image, rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height);
+}
+
 export async function createBattleCard(result, shareUrl = window.location.origin) {
+  const layout = battleCardLayout();
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1440;
@@ -36,42 +53,55 @@ export async function createBattleCard(result, shareUrl = window.location.origin
   ctx.lineWidth = 3;
   ctx.strokeRect(42, 42, 996, 1356);
   ctx.fillStyle = '#11110f';
-  ctx.font = '900 64px Arial, sans-serif';
-  ctx.fillText('嘉豪鉴定所', 76, 126);
-  ctx.font = '700 26px Arial, sans-serif';
-  ctx.fillText('双指数战绩卡', 76, 176);
+  ctx.font = '900 58px Arial, sans-serif';
+  ctx.fillText('嘉豪鉴定所', 72, 120);
+  ctx.font = '700 24px Arial, sans-serif';
+  ctx.fillText('双指数战绩 / 仅供娱乐', 74, 164);
+  ctx.fillRect(72, 196, 940, 4);
 
   ctx.fillStyle = '#0b56f0';
-  ctx.font = '900 210px Arial, sans-serif';
-  ctx.fillText(String(result.jiahao?.score ?? result.score).padStart(2, '0'), 70, 440);
-  ctx.fillStyle = '#11110f';
-  ctx.font = '800 30px Arial, sans-serif';
-  ctx.fillText('嘉豪指数', 82, 488);
-
-  ctx.fillStyle = '#efca16';
-  ctx.font = '900 210px Arial, sans-serif';
-  ctx.fillText(String(result.nailoong?.score ?? 0).padStart(2, '0'), 578, 440);
-  ctx.fillStyle = '#11110f';
-  ctx.font = '800 30px Arial, sans-serif';
-  ctx.fillText('奶龙指数', 592, 488);
+  ctx.fillRect(layout.hero.x, layout.hero.y, layout.hero.width, layout.hero.height);
+  ctx.fillStyle = '#f5f2e9';
+  ctx.fillRect(layout.hero.x + 4, layout.hero.y + 4, layout.hero.width - 8, layout.hero.height - 8);
 
   const mascot = await loadImage('/assets/nailoong/arms.webp').catch(() => null);
-  if (mascot) ctx.drawImage(mascot, 90, 550, 430, 438);
+  if (mascot) drawImageContain(ctx, mascot, { x: layout.hero.x + 8, y: layout.hero.y + 16, width: layout.hero.width - 16, height: layout.hero.height - 24 });
+  ctx.fillStyle = '#11110f';
+  ctx.font = '800 28px Arial, sans-serif';
+  ctx.fillText('嘉豪指数', layout.scores.x, layout.scores.y + 24);
+  ctx.fillStyle = '#0b56f0';
+  ctx.font = '900 158px Arial, sans-serif';
+  ctx.fillText(String(result.jiahao?.score ?? result.score).padStart(2, '0'), layout.scores.x - 8, layout.scores.y + 166);
+  ctx.fillStyle = '#11110f';
+  ctx.fillRect(layout.scores.x, layout.scores.y + 190, layout.scores.width, 3);
+  ctx.font = '800 28px Arial, sans-serif';
+  ctx.fillText('奶龙指数', layout.scores.x, layout.scores.y + 245);
   ctx.fillStyle = '#efca16';
-  ctx.fillRect(500, 570, 480, 88);
+  ctx.font = '900 158px Arial, sans-serif';
+  ctx.fillText(String(result.nailoong?.score ?? 0).padStart(2, '0'), layout.scores.x - 8, layout.scores.y + 386);
   ctx.fillStyle = '#11110f';
-  ctx.font = '900 48px Arial, sans-serif';
-  ctx.fillText(result.nailoong?.archetype || '淡人型奶龙豪', 526, 630);
-  ctx.font = '800 34px Arial, sans-serif';
-  wrap(ctx, result.nailoong?.verdict || result.verdict, 526, 730, 420, 52, 4);
+  ctx.fillRect(layout.scores.x, layout.scores.y + 410, layout.scores.width, 3);
 
-  const qr = await loadImage(await QRCode.toDataURL(shareUrl, { width: 220, margin: 1, color: { dark: '#11110f', light: '#f5f2e9' } }));
-  ctx.drawImage(qr, 76, 1134, 210, 210);
+  ctx.fillStyle = '#efca16';
+  ctx.fillRect(layout.verdict.x, layout.verdict.y, layout.verdict.width, 82);
   ctx.fillStyle = '#11110f';
-  ctx.font = '800 32px Arial, sans-serif';
-  ctx.fillText('扫码测测你有多抽象', 326, 1218);
-  ctx.font = '500 24px Arial, sans-serif';
-  ctx.fillText('结果仅供娱乐，别太当真。', 326, 1262);
+  ctx.font = '900 36px Arial, sans-serif';
+  wrap(ctx, result.nailoong?.archetype || '淡人型奶龙豪', layout.verdict.x + 18, layout.verdict.y + 53, layout.verdict.width - 36, 42, 2);
+  ctx.font = '800 29px Arial, sans-serif';
+  wrap(ctx, result.nailoong?.verdict || result.verdict, layout.verdict.x + 18, layout.verdict.y + 130, layout.verdict.width - 36, 44, 5);
+
+  ctx.fillStyle = '#11110f';
+  ctx.fillRect(72, 1128, 940, 3);
+  const qr = await loadImage(await QRCode.toDataURL(shareUrl, { width: 190, margin: 1, color: { dark: '#11110f', light: '#f5f2e9' } }));
+  ctx.drawImage(qr, layout.qr.x, layout.qr.y, layout.qr.width, layout.qr.height);
+  ctx.fillStyle = '#11110f';
+  ctx.font = '900 32px Arial, sans-serif';
+  ctx.fillText('扫码来对线', 284, 1244);
+  ctx.font = '600 23px Arial, sans-serif';
+  ctx.fillText('测测你有多豪，又有多奶。', 284, 1286);
+  ctx.fillStyle = '#68675f';
+  ctx.font = '500 19px Arial, sans-serif';
+  ctx.fillText('原始素材不入卡，仅展示娱乐结果。', 284, 1330);
   return canvas.toDataURL('image/png');
 }
 

@@ -70,8 +70,9 @@ export function AssayPage({ onComplete, onNavigate }) {
   return <main className="assay-page">
     <section className="assay-hero">
       <div className="assay-copy">
-        <h1>先别急着装正常。</h1>
+        <h1 aria-label="先别急着装正常。">先别急着<br/>装正常。</h1>
         <p>丢进照片、怪话或聊天记录，测测你到底有多豪，又有多奶。</p>
+        <button type="button" className="assay-image-link" onClick={() => onNavigate('lab', 'image')}><Icon name="image" size={17}/> 想直接整活？让奶蛙替你演一张</button>
         <div className="assay-console">
           <div className="input-tabs" role="tablist" aria-label="鉴定素材类型">
             {MODES.map((item) => <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item.id)}><Icon name={item.icon} size={19}/>{item.label}</button>)}
@@ -93,6 +94,7 @@ export function AssayPage({ onComplete, onNavigate }) {
         </div>
       </div>
       <aside className="preview-board" aria-label="双指数预览">
+        <span className="preview-kicker">先看个样子 / 双指数试玩结果</span>
         <img src="/assets/nailoong/toes.webp" alt="抽象奶蛙低头数脚趾" />
         <span className="burst">抽象本蛙<br/>不背锅！</span>
         <div className="preview-scores"><div><span>嘉豪指数</span><strong>76</strong></div><div><span>奶龙指数</span><strong>91</strong></div></div>
