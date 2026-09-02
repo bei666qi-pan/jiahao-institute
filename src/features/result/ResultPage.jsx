@@ -90,7 +90,7 @@ export function ResultPage({ result, onReset, onNavigate, onRoomOpen }) {
 
   return <main className="result-v2-page">
     <header className="result-title-row"><h1>鉴定结果</h1><button type="button" className="outline-button" onClick={onReset}>再测一次 <Icon name="reset" size={18}/></button></header>
-    <p className="source-notice">{result.fallbackNotice ? '云端暂时没接住，当前展示基础算法成绩。' : `${result.source || '规则算法'}生成娱乐信号与判词，指数由版本化规则计算。`} 你的原始内容不会进入历史或好友榜。</p>
+    {result.fallbackNotice ? <p className="source-notice">这次没连上，先给你一个基础成绩。</p> : null}
     <section className="result-layout">
       <div className="verdict-sheet">
         <div className="score-duel"><div><span>嘉豪指数</span><strong className="blue">{jiahao.score}</strong></div><em>VS</em><div><span>奶龙指数</span><strong className="yellow">{nailoong.score}</strong></div></div>

@@ -71,7 +71,7 @@ export function AssayPage({ onComplete, onNavigate }) {
     <section className="assay-hero">
       <div className="assay-copy">
         <h1>先别急着装正常。</h1>
-        <p>丢进一张照片、一句怪话或一段聊天，看看你的嘉豪指数和奶龙指数谁先失控。</p>
+        <p>丢进照片、怪话或聊天记录，测测你到底有多豪，又有多奶。</p>
         <div className="assay-console">
           <div className="input-tabs" role="tablist" aria-label="鉴定素材类型">
             {MODES.map((item) => <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item.id)}><Icon name={item.icon} size={19}/>{item.label}</button>)}
@@ -84,28 +84,20 @@ export function AssayPage({ onComplete, onNavigate }) {
             : <button type="button" className="upload-stage" onClick={() => fileRef.current?.click()}>
                 <Icon name="upload" size={34}/>
                 <strong>{files.length ? `已选择 ${files.length} 份素材` : mode === 'photo' ? '点击拍照或上传图片' : '点击上传聊天截图或文档'}</strong>
-                <span>{files.length ? files.map((file) => file.name).join(' / ') : mode === 'photo' ? 'JPG / PNG / WEBP · 最大 10MB' : '图片 / PDF / TXT / DOCX · 最多 3 份'}</span>
+                <span>{files.length ? files.map((file) => file.name).join(' / ') : '选好就开测，原始内容不会保存'}</span>
               </button>}
           <input ref={fileRef} hidden type="file" multiple={mode === 'chat'} accept={currentMode.accept} onChange={chooseFiles} />
-          <label className="consent-row"><input aria-label="同意将内容用于本次娱乐分析" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>我确认拥有内容使用权，且不会违法违规、侵犯他人隐私等敏感信息。</span></label>
+          <label className="consent-row"><input aria-label="同意将内容用于本次娱乐分析" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>我确认有权使用这些内容，并同意用于本次娱乐鉴定。</span></label>
           {error ? <p className="form-message error" role="alert">{error}</p> : null}
           <button type="button" className="primary-button assay-submit" disabled={busy} onClick={submit}>{busy ? '正在捕捉抽象信号…' : '开始抽象鉴定'}<Icon name="arrow"/></button>
-          <p className="fine-print">鉴定结果仅供娱乐，别太当真（反正你也不正常）。</p>
         </div>
       </div>
       <aside className="preview-board" aria-label="双指数预览">
-        <div className="board-label">你的双指数预览</div>
         <img src="/assets/nailoong/toes.webp" alt="抽象奶蛙低头数脚趾" />
         <span className="burst">抽象本蛙<br/>不背锅！</span>
-        <div className="preview-scores"><div><span>嘉豪指数</span><strong>76</strong><i><b style={{ width: '76%' }}/></i></div><div><span>奶龙指数</span><strong>91</strong><i><b style={{ width: '91%' }}/></i></div></div>
+        <div className="preview-scores"><div><span>嘉豪指数</span><strong>76</strong></div><div><span>奶龙指数</span><strong>91</strong></div></div>
         <small>奶蛙曰：<b>我裂开，但我装的。</b></small>
       </aside>
-    </section>
-    <section className="daily-strip"><strong>今日抽象任务</strong><img src="/assets/nailoong/toes.webp" alt=""/><span>发一条让室友沉默的怪话，即可领取抽象能量包 × 1</span><button type="button" onClick={() => onNavigate('lab')}>去整活 <Icon name="arrow" size={17}/></button><time>每日 00:00 刷新</time></section>
-    <section className="play-doors" aria-label="抽象玩法入口">
-      <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><span>01</span><strong>抽象鉴定</strong><small>识别你的抽象灵魂浓度</small><Icon name="arrow"/></button>
-      <button type="button" onClick={() => onNavigate('lab')}><span>02</span><strong>奶龙反应局</strong><small>没有标准答案，只有真实反应</small><Icon name="arrow"/></button>
-      <button type="button" onClick={() => onNavigate('friends')}><span>03</span><strong>好友整活房</strong><small>拉上损友，一起发疯</small><Icon name="arrow"/></button>
     </section>
   </main>;
 }

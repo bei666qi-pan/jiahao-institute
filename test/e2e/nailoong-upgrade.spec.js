@@ -13,6 +13,7 @@ test('首页使用新导航与双指数鉴定主叙事', async ({ page }) => {
 });
 
 test('文字鉴定回退结果同时展示嘉豪指数和奶龙指数', async ({ page }) => {
+  await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试触发回退' }) }));
   await page.goto('/');
   await page.getByRole('tab', { name: '文字' }).click();
   await page.getByLabel('要鉴定的文字').fill('也没什么，只是一个人习惯了。');
