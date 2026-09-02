@@ -56,3 +56,14 @@ test('人格档案同时展示嘉豪物种与奶龙人格', async ({ page }) => 
   await expect(page.getByRole('tab', { name: '奶龙人格' })).toBeVisible();
   await expect(page.locator('.jiahao-portrait')).toHaveCount(6);
 });
+
+test('手机豪气首页让嘉豪人物占满右侧画面', async ({ page }) => {
+  test.skip((page.viewportSize()?.width || 999) > 760, '仅检查手机构图');
+  await page.goto('/');
+  await page.getByRole('button', { name: '豪气', exact: true }).click();
+  const portrait = page.getByRole('img', { name: '戴墨镜穿夹克的嘉豪' });
+  await expect(portrait).toBeVisible();
+  const box = await portrait.boundingBox();
+  expect(box.height).toBeGreaterThan(box.width * 2);
+  await expect(portrait).toHaveCSS('background-size', 'auto 100%');
+});
