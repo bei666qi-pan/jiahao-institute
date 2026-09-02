@@ -59,6 +59,7 @@ test('GET /healthz returns ok status', async () => {
   assert.equal(body.status, 'ok');
   assert.equal(body.textModelConfigured, false);
   assert.equal(body.visionModelConfigured, false);
+  assert.deepEqual(body.imageGeneration, { minimaxConfigured: false, volcengineConfigured: false, priority: ['minimax', 'volcengine'] });
 });
 
 // === Static File Serving ===
@@ -109,6 +110,15 @@ test('POST /api/quote returns 503 without model key', async () => {
   });
   assert.equal(status, 503);
   assert.ok(body.error);
+});
+
+test('POST /api/images/generate returns 503 when both image providers are unconfigured', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/images/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ prompt: '雨夜撑伞等公交', aspectRatio: '1:1' }),
+  });
+  assert.equal(status, 503);
+  assert.equal(body.error, '图片生成服务尚未配置');
 });
 
 test('GET /api/reactions/daily returns five public questions without model configuration', async () => {

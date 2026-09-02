@@ -6,6 +6,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { calculateEstimatedCost, Observability } from './server/observability.mjs';
 import { loginAdmin, logoutAdmin, verifyAdmin } from './server/admin-auth.mjs';
+import { generateAbstractImage } from './server/image-generation.mjs';
 import {
   buildAssessmentV2,
   calculateJiahaoScore,
@@ -27,6 +28,19 @@ const TEXT_API_KEY = process.env.DEEPSEEK_API_KEY;
 const VISION_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
 const VISION_API_KEY = process.env.ARK_API_KEY;
+const IMAGE_CONFIG = {
+  referenceImageUrl: process.env.IMAGE_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/nailoong/arms.webp',
+  minimax: {
+    key: process.env.MINIMAX_API_KEY || '',
+    url: process.env.MINIMAX_IMAGE_URL || 'https://api.minimaxi.com/v1/image_generation',
+    model: process.env.MINIMAX_IMAGE_MODEL || 'image-01',
+  },
+  volcengine: {
+    key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
+    url: process.env.ARK_IMAGE_URL || `${VISION_API_BASE}/images/generations`,
+    model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
+  },
+};
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
 const observability = new Observability();
@@ -296,6 +310,28 @@ async function handleModelRequest(req, res, endpoint, handler) {
   }
 }
 
+async function handleImageRequest(req, res) {
+  const started = performance.now();
+  const requestId = randomUUID();
+  try {
+    const result = await generateAbstractImage(await readJson(req), IMAGE_CONFIG);
+    sendJson(res, 200, result);
+    void observability.recordApiRequest(req, {
+      requestId, endpoint: '/api/images/generate', mode: 'image_generation', provider: result.provider,
+      model: result.model, statusCode: 200, ok: true, latencyMs: performance.now() - started,
+    });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode) || 503;
+    const message = cleanText(error?.message, '图片生成暂时不可用', 100);
+    void observability.recordApiRequest(req, {
+      requestId, endpoint: '/api/images/generate', mode: 'image_generation', provider: error?.provider || 'image-router',
+      model: null, statusCode, ok: false, latencyMs: performance.now() - started,
+      errorCode: error?.code || 'IMAGE_GENERATION_FAILED', errorMessage: message,
+    });
+    return sendJson(res, statusCode, { error: message, code: error?.code || 'IMAGE_GENERATION_FAILED' });
+  }
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   let pathname = decodeURIComponent(url.pathname);
@@ -329,6 +365,11 @@ export const server = createServer(async (req, res) => {
       visionModelConfigured: Boolean(VISION_API_KEY),
       textModel: TEXT_MODEL,
       visionModel: VISION_MODEL,
+      imageGeneration: {
+        minimaxConfigured: Boolean(IMAGE_CONFIG.minimax.key),
+        volcengineConfigured: Boolean(IMAGE_CONFIG.volcengine.key),
+        priority: ['minimax', 'volcengine'],
+      },
       observability: observability.status(),
     });
 
@@ -386,6 +427,7 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/pk') return handleModelRequest(req, res, pathname, analyzePkWithModel);
     if (req.method === 'POST' && pathname === '/api/court') return handleModelRequest(req, res, pathname, analyzePkWithModel);
     if (req.method === 'POST' && pathname === '/api/quote') return handleModelRequest(req, res, pathname, generateQuoteWithModel);
+    if (req.method === 'POST' && pathname === '/api/images/generate') return handleImageRequest(req, res);
     if (req.method === 'GET' || req.method === 'HEAD') return await serveStatic(req, res);
     return sendJson(res, 405, { error: '不支持的请求方式' });
   } catch (error) {

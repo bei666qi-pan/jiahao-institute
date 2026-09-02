@@ -105,7 +105,7 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await page.unroute('**/api/analyze');
     await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '云端忙' }) }));
     await completeTextAssessment(page, '这个底层逻辑其实不复杂，懂的都懂。');
-    await expect(page.getByText(/基础算法成绩/)).toBeVisible();
+    await expect(page.getByText(/基础成绩/)).toBeVisible();
     await openSection(page, '我的档案');
     await expect(page.locator('.history-grid button')).toHaveCount(1);
   });
@@ -126,7 +126,7 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await expect(page).toHaveURL(/\/r\/JH8F32A$/);
     await expect(page.getByRole('heading', { name: '谁更抽象挑战' })).toBeVisible();
     await expect(page.getByText('奶龙本人 · 我')).toBeVisible();
-    await expect(page.getByText(/淡人型奶龙豪 · 云端可信/)).toBeVisible();
+    await expect(page.getByText('淡人型奶龙豪')).toBeVisible();
   });
 
   test('未鉴定好友打开邀请后可先测并自动回房加入', async ({ page }) => {
@@ -147,7 +147,7 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     });
 
     await page.goto('/r/JH8F32A');
-    const assessFirst = page.getByRole('button', { name: '先完成鉴定' });
+    const assessFirst = page.getByRole('button', { name: '先去鉴定' });
     await expect(assessFirst).toBeEnabled();
     await assessFirst.click();
     await completeTextAssessment(page, '好友打开邀请后直接完成鉴定。', { expectResult: false });
@@ -158,6 +158,7 @@ test.describe('嘉豪鉴定所升级全链路', () => {
   test('390×844下首页、实验室和好友页均无横向溢出', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
+    await expect(page.getByRole('navigation', { name: '移动端主导航' }).getByRole('button')).toHaveCount(5);
     for (const [desktop, mobile] of [['鉴定', '鉴定'], ['抽象实验室', '实验室'], ['好友战绩', '好友']]) {
       await openSection(page, desktop, mobile);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);

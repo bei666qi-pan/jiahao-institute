@@ -11,7 +11,7 @@ const ASSETS = {
   cat: '/assets/nailoong/cat.webp',
 };
 
-function ReactionGame({ latestResult, onReactionComplete }) {
+function ReactionGame({ onReactionComplete }) {
   const [challenge, setChallenge] = useState(null);
   const [answers, setAnswers] = useState([]);
   const [result, setResult] = useState(null);
@@ -42,14 +42,14 @@ function ReactionGame({ latestResult, onReactionComplete }) {
     finally { setBusy(false); }
   };
 
-  if (error) return <div className="game-error" role="alert"><strong>奶龙反应局暂时卡住了</strong><p>{error}</p></div>;
+  if (error) return <div className="game-error" role="alert"><strong>题目走丢了</strong><p>刷新一下，再来一局。</p></div>;
   if (!challenge) return <div className="game-loading">正在翻找今天的抽象题目…</div>;
   if (result) return <div className="reaction-result"><img src="/assets/nailoong/arms.webp" alt="抱臂的抽象奶蛙"/><div><span>本局奶龙指数</span><strong>{result.nailoong.score}</strong><h3>{result.nailoong.archetype}</h3><p>{result.nailoong.verdict}</p><button type="button" className="outline-button" onClick={() => { setAnswers([]); setResult(null); }}>再来一局 <Icon name="reset"/></button></div></div>;
   if (busy || answers.length >= challenge.questions.length) return <div className="game-loading" aria-live="polite">正在汇总你的抽象反应…</div>;
 
   const question = challenge.questions[answers.length];
   return <div className="reaction-game">
-    <div className="reaction-copy"><strong>第 <b>{answers.length + 1}</b> / {challenge.questions.length} 题</strong><div className="reaction-thumbs">{challenge.questions.map((item, index) => <img key={item.id} className={index === answers.length ? 'active' : ''} src={ASSETS[item.asset]} alt=""/>)}</div><span>本题情境</span><h3>{question.prompt}</h3></div>
+    <div className="reaction-copy"><strong><b>{answers.length + 1}</b> / {challenge.questions.length}</strong><h3>{question.prompt}</h3></div>
     <img className="reaction-scene" src={ASSETS[question.asset]} alt="抽象奶蛙情境图"/>
     <div className="reaction-options">{question.options.map((option) => <button type="button" className="reaction-option" key={option.id} onClick={() => choose(question.id, option.id)}>{option.label}<Icon name="arrow" size={18}/></button>)}</div>
   </div>;
@@ -81,7 +81,7 @@ function AbstractCourt() {
   };
 
   return <section className={`lab-panel compact ${open ? 'open' : ''}`}>
-    <button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><span>02</span><strong>抽象法庭</strong><small>提交双方证词，判决谁更离谱</small><Icon name="scale"/></button>
+    <button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><strong>抽象法庭</strong><small>两句话，判谁更离谱</small><Icon name="scale"/></button>
     {open ? <div className="court-body"><div className="court-inputs"><label>原告证词<textarea value={first} onChange={(event) => setFirst(event.target.value)} /></label><b>VS</b><label>被告证词<textarea value={second} onChange={(event) => setSecond(event.target.value)} /></label></div><button type="button" className="yellow-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={judge}>{busy ? '正在开庭…' : '立即开庭'} <Icon name="scale"/></button>{result ? <div className="court-result"><strong>{result.battle.title}</strong><p>{result.battle.reason}</p></div> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 原始证词只用于本次娱乐裁决，不进入好友榜。</p></div> : null}
   </section>;
 }
@@ -102,16 +102,78 @@ function ToughTalkTranslator() {
     } finally { setBusy(false); }
   };
 
-  return <section id="tough-talk-translator" className={`lab-panel compact ${open ? 'open' : ''}`}><button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><span>04</span><strong>嘴硬翻译器</strong><small>把普通话翻译成“我真没事”</small><Icon name="text"/></button>{open ? <div className="translator-body"><textarea aria-label="嘴硬翻译原句" value={input} onChange={(event) => setInput(event.target.value)} /><button type="button" className="primary-button" onClick={generate} disabled={busy}>{busy ? '翻译中…' : '开始嘴硬'}</button>{output ? <blockquote>{output}</blockquote> : null}</div> : null}</section>;
+  return <section id="tough-talk-translator" className={`lab-panel compact ${open ? 'open' : ''}`}><button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><strong>嘴硬翻译器</strong><small>把普通话翻译成“我真没事”</small><Icon name="text"/></button>{open ? <div className="translator-body"><textarea aria-label="嘴硬翻译原句" value={input} onChange={(event) => setInput(event.target.value)} /><button type="button" className="primary-button" onClick={generate} disabled={busy}>{busy ? '翻译中…' : '开始嘴硬'}</button>{output ? <blockquote>{output}</blockquote> : null}</div> : null}</section>;
+}
+
+const IMAGE_SCENES = [
+  { id: 'cinematic', label: '雨夜电影' },
+  { id: 'editorial', label: '暖白档案' },
+  { id: 'prank', label: '朋友整活' },
+  { id: 'awkward', label: '社死现场' },
+];
+const IMAGE_RATIOS = [
+  { id: '1:1', label: '方图 1:1' },
+  { id: '3:4', label: '竖版 3:4' },
+  { id: '16:9', label: '横版 16:9' },
+];
+
+function AbstractImageGame() {
+  const [open, setOpen] = useState(false);
+  const [prompt, setPrompt] = useState('在雨夜撑伞等公交，神态平静得不合时宜');
+  const [scene, setScene] = useState('cinematic');
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const generate = async () => {
+    setBusy(true);
+    setError('');
+    setResult(null);
+    trackProductEvent('lab_game_started', { game: 'image' });
+    try {
+      const payload = await postJson('/api/images/generate', { prompt, scene, aspectRatio }, { signal: AbortSignal.timeout(100_000) });
+      setResult(payload);
+      trackProductEvent('lab_game_completed', { game: 'image', outcome: payload.provider });
+    } catch (nextError) {
+      setError('这张图没生成出来，换个说法再试一次。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const imageSource = result?.imageDataUrl || result?.imageUrl;
+  return <section className={`lab-panel image-lab-panel ${open ? 'open' : ''}`}>
+    <button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+      <strong>奶蛙生图局</strong><small>把离谱脑洞变成现场</small><Icon name="image"/>
+    </button>
+    {open ? <div className="image-lab-body">
+      <div className="image-lab-controls">
+        <label className="image-prompt-label" htmlFor="abstract-image-prompt">你想让奶蛙干什么？</label>
+        <textarea id="abstract-image-prompt" value={prompt} maxLength={500} onChange={(event) => setPrompt(event.target.value)} />
+        <fieldset className="image-choice-group"><legend>情境滤镜</legend><div>{IMAGE_SCENES.map((item) => <button type="button" key={item.id} aria-pressed={scene === item.id} onClick={() => setScene(item.id)}>{item.label}</button>)}</div></fieldset>
+        <fieldset className="image-choice-group"><legend>画面比例</legend><div>{IMAGE_RATIOS.map((item) => <button type="button" key={item.id} aria-pressed={aspectRatio === item.id} onClick={() => setAspectRatio(item.id)}>{item.label}</button>)}</div></fieldset>
+        {error ? <div className="form-message error" role="alert">{error}</div> : null}
+        <button type="button" className="yellow-button image-generate-button" disabled={busy || prompt.trim().length < 2} onClick={generate}>{busy ? '奶蛙正在赶来…' : '生成抽象现场'} <Icon name="image"/></button>
+        <p className="privacy-line"><Icon name="lock" size={15}/> 描述和图片不会保存。</p>
+      </div>
+      <div className="image-lab-output" aria-live="polite">
+        {busy ? <div className="image-generating"><strong>奶蛙赶来中…</strong><p>这张图要现搓，稍等一下。</p></div> : imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
+          <img src={imageSource} alt="生成的抽象奶蛙场景"/>
+          <figcaption><strong>图好了，拿去整活。</strong><a className="outline-button" href={imageSource} download={`奶蛙抽象现场-${result.id || 'image'}.jpg`}>下载图片 <Icon name="download" size={18}/></a></figcaption>
+        </figure> : <div className="image-empty"><img src={ASSETS.umbrella} alt="等待生成的抽象奶蛙"/><span>把一个不合时宜的场面<br/>交给奶蛙来演</span></div>}
+      </div>
+    </div> : null}
+  </section>;
 }
 
 export function LabPage({ latestResult, onNavigate, onReactionComplete }) {
   return <main className="lab-page">
-    <header className="lab-title"><div><h1>今天抽象点什么？</h1><p>没有标准答案，只有你的真实反应。</p></div><div className="persistent-score"><span>嘉豪 <b>{latestResult?.jiahao?.score ?? latestResult?.score ?? '--'}</b></span><span>奶龙 <b>{latestResult?.nailoong?.score ?? '--'}</b></span></div></header>
-    <section className="lab-panel reaction-panel"><div className="panel-heading static"><span>01</span><strong>奶龙反应局</strong><small>正在进行</small><Icon name="flask"/></div><ReactionGame latestResult={latestResult} onReactionComplete={onReactionComplete}/></section>
+    <header className="lab-title"><div><h1>今天抽象点什么？</h1><p>没有标准答案，只有你的真实反应。</p></div>{latestResult ? <div className="persistent-score"><span>嘉豪 <b>{latestResult.jiahao?.score ?? latestResult.score}</b></span><span>奶龙 <b>{latestResult.nailoong?.score}</b></span></div> : null}</header>
+    <section className="lab-panel reaction-panel"><div className="panel-heading static"><strong>奶龙反应局</strong><small>五道题，看看你会怎么接</small><Icon name="flask"/></div><ReactionGame onReactionComplete={onReactionComplete}/></section>
     <AbstractCourt />
-    <section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><span>03</span><strong>好友整活房</strong><small>7天挑战赛 · 排名 · 轮换任务</small><Icon name="users"/></button></section>
+    <section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section>
     <ToughTalkTranslator />
-    <section className="daily-task-card"><Icon name="archive"/><strong>今日任务：用一句话证明你嘴硬</strong><button type="button" onClick={() => { const panel = document.querySelector('#tough-talk-translator'); if (!panel?.classList.contains('open')) panel?.querySelector('button')?.click(); window.setTimeout(() => panel?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>去完成 <Icon name="arrow"/></button></section>
+    <AbstractImageGame />
   </main>;
 }
