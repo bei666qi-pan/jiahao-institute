@@ -111,6 +111,42 @@ test('POST /api/quote returns 503 without model key', async () => {
   assert.ok(body.error);
 });
 
+test('GET /api/reactions/daily returns five public questions without model configuration', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/reactions/daily?date=2026-09-02`);
+  assert.equal(status, 200);
+  assert.equal(body.questions.length, 5);
+  assert.ok(body.questions.every((question) => question.options.every((option) => !('weights' in option))));
+});
+
+test('POST /api/reactions/score validates a complete daily answer set', async () => {
+  const daily = await fetchJson(`${serverUrl}/api/reactions/daily?date=2026-09-02`);
+  const answers = daily.body.questions.map((question) => ({
+    questionId: question.id,
+    optionId: question.options[0].id,
+  }));
+  const { status, body } = await fetchJson(`${serverUrl}/api/reactions/score`, {
+    method: 'POST',
+    body: JSON.stringify({ challengeId: daily.body.challengeId, date: '2026-09-02', answers }),
+  });
+  assert.equal(status, 200);
+  assert.equal(body.answerCount, 5);
+  assert.equal(body.nailoong.dimensions.abstractReaction >= 0, true);
+});
+
+test('POST /api/court returns 503 without model configuration', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/court`, {
+    method: 'POST',
+    body: JSON.stringify({
+      participants: [
+        { name: '原告', input: '我家猫会说人话', mode: 'text' },
+        { name: '被告', input: '昨天被外星人绑架', mode: 'text' },
+      ],
+    }),
+  });
+  assert.equal(status, 503);
+  assert.ok(body.error);
+});
+
 // === Method Checks ===
 test('GET /api/analyze falls through to serveStatic (returns index.html)', async () => {
   const response = await fetch(`${serverUrl}/api/analyze`);

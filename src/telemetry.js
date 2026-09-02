@@ -11,6 +11,13 @@ function post(path, body, keepalive = false) {
   }).catch(() => null);
 }
 
+export function trackProductEvent(name, properties = {}) {
+  if (typeof window === 'undefined' || window.location.pathname.startsWith('/admin')) return;
+  const safeName = String(name || '').trim().slice(0, 48);
+  if (!safeName) return;
+  void post('/api/telemetry/event', { name: safeName, properties });
+}
+
 export function startTelemetry() {
   if (window.location.pathname.startsWith('/admin')) return () => {};
   let lastActiveAt = Date.now();

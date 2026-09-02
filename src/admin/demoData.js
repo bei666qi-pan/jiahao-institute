@@ -29,6 +29,10 @@ export const demoOverview = {
     { endpoint: '/api/pk', status_code: 504, error_message: '模型响应超时', occurred_at: '2026-07-27T08:07:18+08:00' },
     { endpoint: '/api/analyze', status_code: 429, error_message: '供应商请求限流', occurred_at: '2026-07-26T23:48:55+08:00' },
   ],
+  productFunnel: [
+    ['assessment_started', 2860, 2410], ['assessment_completed', 2184, 1972], ['share_clicked', 914, 803],
+    ['challenge_created', 642, 588], ['challenge_opened', 1088, 951], ['friend_completed', 531, 486],
+  ].map(([event, events, visitors]) => ({ event, events, visitors })),
 };
 
 export const demoVisits = {
