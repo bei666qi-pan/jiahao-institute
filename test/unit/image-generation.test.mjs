@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  IMAGE_PROVIDER_TIMEOUTS,
   buildAbstractImagePrompt,
   generateAbstractImage,
   normalizeImageRequest,
@@ -24,67 +25,65 @@ const qualityConfig = {
   quality: { key: 'vision-test', url: 'https://ark.test/api/v3/chat/completions', model: 'vision-test' },
 };
 
-test('抽象生图优先返回 MiniMax 图片且不会调用火山备援', async () => {
+test('provider timeouts leave enough time for the fallback chain', () => {
+  assert.equal(IMAGE_PROVIDER_TIMEOUTS.minimax, 45_000);
+  assert.equal(IMAGE_PROVIDER_TIMEOUTS.volcengine, 90_000);
+  assert.ok(IMAGE_PROVIDER_TIMEOUTS.minimax < IMAGE_PROVIDER_TIMEOUTS.volcengine);
+});
+
+test('抽象生图优先返回火山图片且不会调用 MiniMax 备援', async () => {
   const calls = [];
   const result = await generateAbstractImage({ prompt: '雨夜撑伞等公交', aspectRatio: '1:1' }, config, async (url, init) => {
     calls.push({ url, body: JSON.parse(init.body) });
-    return jsonResponse(200, {
-      id: 'minimax-image-1',
-      data: { image_base64: ['aW1hZ2U='] },
-      metadata: { failed_count: '0', success_count: '1' },
-      base_resp: { status_code: 0, status_msg: 'success' },
-    });
+    return jsonResponse(200, { id: 'volc-image-1', data: [{ b64_json: 'aW1hZ2U=' }] });
   });
 
-  assert.equal(result.provider, 'minimax');
-  assert.equal(result.source, 'MiniMax 图片生成');
+  assert.equal(result.provider, 'volcengine');
+  assert.equal(result.source, '火山引擎图片生成');
   assert.equal(result.imageDataUrl, 'data:image/jpeg;base64,aW1hZ2U=');
   assert.equal(result.fallback.used, false);
   assert.equal(calls.length, 1);
   assert.match(calls[0].body.prompt, /浅黄色软体/);
-  assert.equal(calls[0].body.prompt_optimizer, false);
   assert.doesNotMatch(calls[0].body.prompt, /蛙|青蛙/);
   assert.match(calls[0].body.prompt, /只能有两只眼睛/);
   assert.match(calls[0].body.prompt, /只有一条短短的水平细线嘴/);
-  assert.deepEqual(calls[0].body.subject_reference, [{
-    type: 'character', image_file: config.referenceImageUrl,
-  }]);
+  assert.deepEqual(calls[0].body.image, [config.referenceImageUrl]);
 });
 
-test('MiniMax 限流时自动降级火山引擎并标明真实来源', async () => {
+test('火山限流时自动降级 MiniMax 并标明真实来源', async () => {
   const calls = [];
   const result = await generateAbstractImage({ prompt: '抱臂站在便利店门口', aspectRatio: '3:4' }, config, async (url, init) => {
     calls.push({ url, body: JSON.parse(init.body) });
-    if (url.includes('minimax')) return jsonResponse(429, { base_resp: { status_code: 1002, status_msg: 'rate limit' } });
-    return jsonResponse(200, { id: 'volc-image-1', data: [{ b64_json: 'dm9sYw==' }], usage: { generated_images: 1 } });
+    if (url.includes('ark.test')) return jsonResponse(429, { error: { code: 'RateLimit', message: 'rate limit' } });
+    return jsonResponse(200, { id: 'minimax-image-1', data: { image_base64: ['dm9sYw=='] }, base_resp: { status_code: 0, status_msg: 'success' } });
   });
 
-  assert.equal(result.provider, 'volcengine');
-  assert.equal(result.source, '火山引擎图片生成 · 自动降级');
+  assert.equal(result.provider, 'minimax');
+  assert.equal(result.source, 'MiniMax 图片生成 · 自动降级');
   assert.equal(result.imageDataUrl, 'data:image/jpeg;base64,dm9sYw==');
-  assert.deepEqual(result.fallback, { used: true, from: 'minimax', reason: 'rate_limited' });
+  assert.deepEqual(result.fallback, { used: true, from: 'volcengine', reason: 'rate_limited' });
   assert.equal(calls.length, 2);
-  assert.equal(calls[1].body.size, '1728x2304');
-  assert.deepEqual(calls[1].body.image, [config.referenceImageUrl]);
+  assert.equal(calls[1].body.aspect_ratio, '3:4');
+  assert.deepEqual(calls[1].body.subject_reference, [{ type: 'character', image_file: config.referenceImageUrl }]);
 });
 
-test('MiniMax 成图角色走样时经视觉质检自动降级并验收火山结果', async () => {
+test('火山成图角色走样时经视觉质检自动降级并验收 MiniMax 结果', async () => {
   const calls = [];
   const result = await generateAbstractImage({ prompt: '雨夜发呆', aspectRatio: '1:1' }, qualityConfig, async (url, init) => {
     const body = JSON.parse(init.body);
     calls.push({ url, body });
-    if (url.includes('minimax')) return jsonResponse(200, {
-      id: 'bad-minimax', data: { image_base64: ['YmFk'] }, base_resp: { status_code: 0, status_msg: 'success' },
-    });
     if (url.includes('chat/completions')) {
       const image = body.messages[1].content.find((item) => item.type === 'image_url').image_url.url;
       const passes = image.endsWith('Z29vZA==');
       return jsonResponse(200, { choices: [{ message: { content: JSON.stringify({ passes, reason: passes ? '角色一致' : '出现额外五官' }) } }] });
     }
-    return jsonResponse(200, { id: 'good-volc', data: [{ b64_json: 'Z29vZA==' }] });
+    if (url.includes('minimax')) return jsonResponse(200, {
+      id: 'good-minimax', data: { image_base64: ['Z29vZA=='] }, base_resp: { status_code: 0, status_msg: 'success' },
+    });
+    return jsonResponse(200, { id: 'bad-volc', data: [{ b64_json: 'YmFk' }] });
   });
 
-  assert.equal(result.provider, 'volcengine');
+  assert.equal(result.provider, 'minimax');
   assert.equal(result.fallback.reason, 'identity_mismatch');
   assert.equal(calls.length, 4);
   assert.equal(calls.filter((item) => item.url.includes('chat/completions')).length, 2);
@@ -105,7 +104,7 @@ test('两家成图都不符合角色时不向玩家返回错误形象', async ()
   );
 });
 
-test('MiniMax 内容参数错误不会通过备援绕过拒绝', async () => {
+test('火山内容参数错误不会通过备援绕过拒绝', async () => {
   let calls = 0;
   await assert.rejects(
     generateAbstractImage({ prompt: '违规请求', aspectRatio: '1:1' }, config, async () => {
@@ -117,17 +116,17 @@ test('MiniMax 内容参数错误不会通过备援绕过拒绝', async () => {
   assert.equal(calls, 1);
 });
 
-test('MiniMax 未配置时直接使用火山引擎备援', async () => {
+test('火山未配置时直接使用 MiniMax 备援', async () => {
   const result = await generateAbstractImage(
     { prompt: '数脚趾数到怀疑人生', aspectRatio: '16:9' },
-    { ...config, minimax: { ...config.minimax, key: '' } },
+    { ...config, volcengine: { ...config.volcengine, key: '' } },
     async (_url, init) => {
       const body = JSON.parse(init.body);
-      assert.equal(body.size, '2560x1440');
-      return jsonResponse(200, { id: 'volc-image-2', data: [{ b64_json: 'YmFja3Vw' }] });
+      assert.equal(body.aspect_ratio, '16:9');
+      return jsonResponse(200, { id: 'minimax-image-2', data: { image_base64: ['YmFja3Vw'] }, base_resp: { status_code: 0, status_msg: 'success' } });
     },
   );
-  assert.equal(result.provider, 'volcengine');
+  assert.equal(result.provider, 'minimax');
   assert.equal(result.fallback.reason, 'not_configured');
 });
 

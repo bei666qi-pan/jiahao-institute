@@ -59,7 +59,7 @@ test('GET /healthz returns ok status', async () => {
   assert.equal(body.status, 'ok');
   assert.equal(body.textModelConfigured, false);
   assert.equal(body.visionModelConfigured, false);
-  assert.deepEqual(body.imageGeneration, { minimaxConfigured: false, volcengineConfigured: false, priority: ['minimax', 'volcengine'] });
+  assert.deepEqual(body.imageGeneration, { minimaxConfigured: false, volcengineConfigured: false, priority: ['volcengine', 'minimax'] });
 });
 
 // === Static File Serving ===
