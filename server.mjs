@@ -40,6 +40,11 @@ const IMAGE_CONFIG = {
     url: process.env.ARK_IMAGE_URL || `${VISION_API_BASE}/images/generations`,
     model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
   },
+  quality: {
+    key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
+    url: `${(process.env.ARK_IMAGE_URL || `${VISION_API_BASE}/images/generations`).replace(/\/images\/generations$/, '')}/chat/completions`,
+    model: VISION_MODEL,
+  },
 };
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
