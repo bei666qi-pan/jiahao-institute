@@ -132,6 +132,48 @@ function metric(value, previous) {
   return { value: currentNumber, previous: previousNumber, change: percentChange(currentNumber, previousNumber) };
 }
 
+function ratio(numerator, denominator) {
+  const bottom = number(denominator);
+  return bottom > 0 ? number(numerator) / bottom * 100 : null;
+}
+
+export function buildProductInsights(eventRows = [], gameRows = [], imageRow = null) {
+  const events = new Map(eventRows.map((row) => [row.event_name, {
+    event: row.event_name,
+    events: number(row.events),
+    visitors: number(row.visitors),
+  }]));
+  const stages = (names) => {
+    let previous = null;
+    return names.flatMap((event) => {
+      const row = events.get(event);
+      if (!row) return [];
+      const conversion = previous ? ratio(row.visitors, previous.visitors) : (event === names[0] ? 100 : null);
+      previous = row;
+      return [{ ...row, conversion }];
+    });
+  };
+  const image = imageRow || {};
+  return {
+    assessment: stages(['assessment_started', 'assessment_completed', 'share_clicked', 'challenge_created']),
+    invite: stages(['challenge_opened', 'friend_completed']),
+    games: gameRows.map((row) => ({
+      game: row.game || 'unknown',
+      started: number(row.started),
+      completed: number(row.completed),
+      players: number(row.players),
+      completionRate: ratio(row.completed, row.started),
+    })),
+    image: {
+      requests: number(image.requests),
+      successes: number(image.successes),
+      successRate: ratio(image.successes, image.requests),
+      p95Ms: number(image.p95_ms),
+      averageLatencyMs: number(image.average_latency_ms),
+    },
+  };
+}
+
 export function normalizeProductEvent(payload = {}) {
   const name = typeof payload.name === 'string' ? payload.name.trim() : '';
   if (!PRODUCT_EVENT_NAMES.has(name)) return null;
@@ -294,7 +336,7 @@ export class Observability {
       coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros,
       count(*) filter (where pricing_configured)::bigint priced_requests
       from jh_api_requests where occurred_at >= $1 and occurred_at < $2`;
-    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel] = await Promise.all([
+    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel, labGames, imagePerformance] = await Promise.all([
       this.query(trafficSql, [range.start, range.end]),
       this.query(trafficSql, [range.previousStart, range.start]),
       this.query(apiSql, [range.start, range.end]),
@@ -317,9 +359,22 @@ export class Observability {
       this.query(`select endpoint, status_code, error_code, error_message, occurred_at
         from jh_api_requests where ok = false and occurred_at >= $1 and occurred_at < $2
         order by occurred_at desc limit 5`, [range.start, range.end]),
-      this.query(`select event_name, count(*)::bigint events, count(distinct visitor_id)::bigint visitors
+      this.query(`select event_name, count(*)::bigint events,
+        count(distinct coalesce(visitor_id::text, session_id::text))::bigint visitors
         from jh_product_events where created_at >= $1 and created_at < $2
         group by event_name order by events desc`, [range.start, range.end]),
+      this.query(`select coalesce(properties->>'game','unknown') game,
+        count(*) filter (where event_name = 'lab_game_started')::bigint started,
+        count(*) filter (where event_name = 'lab_game_completed')::bigint completed,
+        count(distinct coalesce(visitor_id::text, session_id::text))::bigint players
+        from jh_product_events where created_at >= $1 and created_at < $2
+          and event_name in ('lab_game_started','lab_game_completed')
+        group by 1 order by started desc`, [range.start, range.end]),
+      this.query(`select count(*)::bigint requests, count(*) filter (where ok)::bigint successes,
+        coalesce(percentile_cont(.95) within group (order by latency_ms),0)::numeric p95_ms,
+        coalesce(avg(latency_ms),0)::numeric average_latency_ms
+        from jh_api_requests where occurred_at >= $1 and occurred_at < $2
+          and endpoint = '/api/images/generate'`, [range.start, range.end]),
     ]);
     const t = currentTraffic.rows[0]; const pt = previousTraffic.rows[0];
     const a = currentApi.rows[0]; const pa = previousApi.rows[0];
@@ -349,6 +404,7 @@ export class Observability {
       endpoints: endpoints.rows.map((row) => ({ endpoint: row.endpoint, requests: number(row.requests), successRate: number(row.successes) / Math.max(1, number(row.requests)) * 100, p95Ms: number(row.p95_ms), estimatedCostMicros: number(row.estimated_cost_micros) })),
       recentErrors: errors.rows,
       productFunnel: productFunnel.rows.map((row) => ({ event: row.event_name, events: number(row.events), visitors: number(row.visitors) })),
+      productInsights: buildProductInsights(productFunnel.rows, labGames.rows, imagePerformance.rows[0]),
     };
   }
 

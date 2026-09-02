@@ -127,33 +127,29 @@ const IMAGE_RATIOS = [
   { id: '16:9', label: '横版 16:9' },
 ];
 
-function AbstractImageGame() {
-  const [open, setOpen] = useState(false);
+function AbstractImageGame({ imageTask, imageJob, onNavigate }) {
+  const [open, setOpen] = useState(() => imageJob.status !== 'idle' || window.location.hash === '#nailoong-image-studio');
   const [prompt, setPrompt] = useState('在雨夜撑伞等公交，神态平静得不合时宜');
   const [scene, setScene] = useState('cinematic');
   const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const result = imageJob.result;
+  const error = imageJob.status === 'error' ? '这张图没生成出来，换个说法再试一次。' : '';
+  const busy = imageJob.status === 'running';
+
+  useEffect(() => {
+    if (imageJob.status !== 'idle') setOpen(true);
+  }, [imageJob.status]);
 
   const generate = async () => {
-    setBusy(true);
-    setError('');
-    setResult(null);
     trackProductEvent('lab_game_started', { game: 'image' });
     try {
-      const payload = await postJson('/api/images/generate', { prompt, scene, aspectRatio }, { signal: AbortSignal.timeout(100_000) });
-      setResult(payload);
+      const payload = await imageTask.start({ prompt, scene, aspectRatio });
       trackProductEvent('lab_game_completed', { game: 'image', outcome: payload.provider });
-    } catch (nextError) {
-      setError('这张图没生成出来，换个说法再试一次。');
-    } finally {
-      setBusy(false);
-    }
+    } catch { /* 全站任务栏会保留可重试状态 */ }
   };
 
   const imageSource = result?.imageDataUrl || result?.imageUrl;
-  return <section className={`lab-panel image-lab-panel ${open ? 'open' : ''}`}>
+  return <section id="nailoong-image-studio" className={`lab-panel image-lab-panel ${open ? 'open' : ''}`}>
     <button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
       <strong>奶蛙生图局</strong><small>把离谱脑洞变成现场</small><Icon name="image"/>
     </button>
@@ -164,11 +160,11 @@ function AbstractImageGame() {
         <fieldset className="image-choice-group"><legend>情境滤镜</legend><div>{IMAGE_SCENES.map((item) => <button type="button" key={item.id} aria-pressed={scene === item.id} onClick={() => setScene(item.id)}>{item.label}</button>)}</div></fieldset>
         <fieldset className="image-choice-group"><legend>画面比例</legend><div>{IMAGE_RATIOS.map((item) => <button type="button" key={item.id} aria-pressed={aspectRatio === item.id} onClick={() => setAspectRatio(item.id)}>{item.label}</button>)}</div></fieldset>
         {error ? <div className="form-message error" role="alert">{error}</div> : null}
-        <button type="button" className="yellow-button image-generate-button" disabled={busy || prompt.trim().length < 2} onClick={generate}>{busy ? '奶蛙正在赶来…' : '生成抽象现场'} <Icon name="image"/></button>
+        <button type="button" className="yellow-button image-generate-button" disabled={busy || prompt.trim().length < 2} onClick={generate}>{busy ? '正在生成，放心去逛…' : '生成抽象现场'} <Icon name="image"/></button>
         <p className="privacy-line"><Icon name="lock" size={15}/> 这是生成图，别当真；描述和图片不会保存。</p>
       </div>
       <div className="image-lab-output" aria-live="polite">
-        {busy ? <div className="image-generating"><strong>奶蛙赶来中…</strong><p>这张图要现搓，稍等一下。</p></div> : imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
+        {busy ? <div className="image-generating"><span>后台生成中</span><strong>不用在这等。</strong><p>切去鉴定、反应局或好友房，画好后右下角会提醒你。</p><div><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做鉴定</button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>去好友房</button></div></div> : imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
           <img src={imageSource} alt="生成的抽象奶蛙场景"/>
           <figcaption><strong>图好了，拿去整活。</strong><a className="outline-button" href={imageSource} download={`奶蛙抽象现场-${result.id || 'image'}.jpg`}>下载图片 <Icon name="download" size={18}/></a></figcaption>
         </figure> : <div className="image-empty"><img src={ASSETS.umbrella} alt="等待生成的抽象奶蛙"/><span>把一个不合时宜的场面<br/>交给奶蛙来演</span></div>}
@@ -177,13 +173,13 @@ function AbstractImageGame() {
   </section>;
 }
 
-export function LabPage({ latestResult, onNavigate, onReactionComplete }) {
+export function LabPage({ latestResult, onNavigate, onReactionComplete, imageTask, imageJob }) {
   return <main className="lab-page">
     <header className="lab-title"><div><h1>今天抽象点什么？</h1><p>没有标准答案，只有你的真实反应。</p></div>{latestResult ? <div className="persistent-score"><span>嘉豪 <b>{latestResult.jiahao?.score ?? latestResult.score}</b></span><span>奶龙 <b>{latestResult.nailoong?.score}</b></span></div> : null}</header>
     <section className="lab-panel reaction-panel"><div className="panel-heading static"><strong>奶龙反应局</strong><small>五道题，看看你会怎么接</small><Icon name="flask"/></div><ReactionGame onReactionComplete={onReactionComplete}/></section>
     <AbstractCourt />
     <section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section>
     <ToughTalkTranslator />
-    <AbstractImageGame />
+    <AbstractImageGame imageTask={imageTask} imageJob={imageJob} onNavigate={onNavigate}/>
   </main>;
 }

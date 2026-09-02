@@ -11,11 +11,26 @@ function post(path, body, keepalive = false) {
   }).catch(() => null);
 }
 
+export function createTelemetryTransport(send = post) {
+  let sessionReady = Promise.resolve(null);
+  return {
+    recordSession(body) {
+      sessionReady = Promise.resolve(send('/api/telemetry/session', body)).catch(() => null);
+      return sessionReady;
+    },
+    recordEvent(body) {
+      return sessionReady.then(() => send('/api/telemetry/event', body)).catch(() => null);
+    },
+  };
+}
+
+const transport = createTelemetryTransport();
+
 export function trackProductEvent(name, properties = {}) {
   if (typeof window === 'undefined' || window.location.pathname.startsWith('/admin')) return;
   const safeName = String(name || '').trim().slice(0, 48);
   if (!safeName) return;
-  void post('/api/telemetry/event', { name: safeName, properties });
+  void transport.recordEvent({ name: safeName, properties });
 }
 
 export function startTelemetry() {
@@ -26,7 +41,7 @@ export function startTelemetry() {
   const events = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
   events.forEach((name) => window.addEventListener(name, markActive, { passive: true }));
 
-  const recordPage = () => post('/api/telemetry/session', { path: `${window.location.pathname}${window.location.search}`, referrer: document.referrer });
+  const recordPage = () => transport.recordSession({ path: `${window.location.pathname}${window.location.search}`, referrer: document.referrer });
   void recordPage();
 
   const routeTimer = window.setInterval(() => {

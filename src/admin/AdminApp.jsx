@@ -172,6 +172,9 @@ function Overview({ data }) {
     challenge_created: '创建挑战', challenge_opened: '打开邀请', friend_completed: '好友完成',
     lab_game_started: '实验室开局', lab_game_completed: '实验室完成', room_created: '创建房间', room_joined: '加入房间',
   };
+  const insights = data.productInsights || { assessment: data.productFunnel || [], invite: [], games: [], image: {} };
+  const gameLabels = { reaction: '奶龙反应局', court: '抽象法庭', image: '奶蛙生图局', hao_quote: '嘉豪语录', hao_pk: '双人豪气 PK' };
+  const Funnel = ({ title, rows }) => <div className="funnel-path"><h3>{title}</h3>{rows.length ? <div>{rows.map((row, index) => <article key={row.event}><header><span>{funnelLabels[row.event] || row.event}</span><b>{formatNumber(row.visitors)} 人</b></header><i><b style={{ width: `${Math.min(100, index ? (row.conversion ?? 0) : 100)}%` }}/></i><small>{index === 0 ? `${formatNumber(row.events)} 次触发` : row.conversion == null ? '缺少上一步起点' : `上一步转化 ${formatNumber(row.conversion, 1)}%`}</small></article>)}</div> : <Empty />}</div>;
   return <div className="overview-page">
     <section className="primary-metrics" aria-label="重点流量指标">
       <Metric label="访问人数" value={formatNumber(t.visitors.value)} change={t.visitors.change} icon="users" />
@@ -186,7 +189,8 @@ function Overview({ data }) {
         <Metric label="跳出率" value={`${formatNumber(t.bounceRate.value, 1)}%`} change={t.bounceRate.change} inverse />
       </div>
     </section>
-    <section className="funnel-panel"><h2>增长漏斗</h2><p>仅统计事件次数与匿名访客数，不记录用户提交内容。</p><div>{(data.productFunnel || []).map((row) => <article key={row.event}><span>{funnelLabels[row.event] || row.event}</span><strong>{formatNumber(row.events)}</strong><small>{formatNumber(row.visitors)} 位访客</small></article>)}</div>{data.productFunnel?.length ? null : <Empty />}</section>
+    <section className="funnel-panel"><header><div><h2>玩家转化</h2><p>按匿名玩家去重，百分比表示从上一步继续的人。</p></div><span>不记录提交内容</span></header><div className="funnel-grid"><Funnel title="鉴定到分享" rows={insights.assessment || []}/><Funnel title="邀请到好友完成" rows={insights.invite || []}/></div></section>
+    <section className="play-metrics"><header><div><h2>玩法表现</h2><p>开局、完成与参与人数分开统计，避免把重复游玩误算成新玩家。</p></div></header><div className="play-metric-grid">{(insights.games || []).map((row) => <article key={row.game}><span>{gameLabels[row.game] || row.game}</span><strong>{row.completionRate == null ? '—' : `${formatNumber(row.completionRate, 1)}%`}</strong><small>{formatNumber(row.completed)} / {formatNumber(row.started)} 局完成 · {formatNumber(row.players)} 人参与</small></article>)}<article className="image-health"><span>图片生成</span><strong>{insights.image?.successRate == null ? '—' : `${formatNumber(insights.image.successRate, 1)}%`}</strong><small>{formatNumber(insights.image?.successes)} / {formatNumber(insights.image?.requests)} 张成功 · P95 {formatNumber((insights.image?.p95Ms || 0) / 1000, 1)} 秒</small></article></div>{insights.games?.length || insights.image?.requests ? null : <Empty title="暂时还没有玩法数据" detail="用户完成玩法后会自动出现。"/>}</section>
     <section className="api-panel"><h2>接口与模型成本</h2>
       <div className="api-metrics">
         <Metric label="API 请求" value={formatNumber(a.requests.value)} change={a.requests.change} />
@@ -227,7 +231,7 @@ function TrafficPage({ overview, visits }) {
 }
 
 function RequestsPage({ data, filters, onFilters, onMore }) {
-  return <div className="detail-page"><div className="filter-bar"><label>接口<select value={filters.endpoint} onChange={(event) => onFilters({ ...filters, endpoint: event.target.value })}><option value="">全部接口</option><option>/api/analyze</option><option>/api/pk</option><option>/api/quote</option></select></label><label>状态<select value={filters.status} onChange={(event) => onFilters({ ...filters, status: event.target.value })}><option value="">全部状态</option><option value="success">成功</option><option value="error">异常</option></select></label></div>
+  return <div className="detail-page"><div className="filter-bar"><label>接口<select value={filters.endpoint} onChange={(event) => onFilters({ ...filters, endpoint: event.target.value })}><option value="">全部接口</option><option>/api/analyze</option><option>/api/images/generate</option><option>/api/court</option><option>/api/pk</option><option>/api/quote</option></select></label><label>状态<select value={filters.status} onChange={(event) => onFilters({ ...filters, status: event.target.value })}><option value="">全部状态</option><option value="success">成功</option><option value="error">异常</option></select></label></div>
     <section className="data-table-wrap wide"><h2>请求明细</h2>{data.rows.length ? <><table><thead><tr><th>时间</th><th>接口</th><th>模式</th><th>供应商 / 模型</th><th>状态</th><th>响应</th><th>Token</th><th>预估成本</th></tr></thead><tbody>{data.rows.map((row) => <tr key={row.request_id}><td>{formatTime(row.occurred_at, true)}</td><td><code>{row.endpoint}</code></td><td>{row.mode || '—'}</td><td>{row.provider || '—'}<small>{row.model}</small></td><td className={row.ok ? 'success' : 'danger'}>{row.status_code}</td><td>{formatNumber(row.latency_ms)}ms</td><td>{row.input_tokens == null ? '—' : `${formatNumber(row.input_tokens)} / ${formatNumber(row.output_tokens)}`}</td><td>{row.pricing_configured ? formatCost(row.estimated_cost_micros) : '未计价'}</td></tr>)}</tbody></table>{data.nextCursor ? <button className="load-more" onClick={onMore}>加载更早请求</button> : null}</> : <Empty />}</section>
   </div>;
 }

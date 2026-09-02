@@ -33,6 +33,21 @@ export const demoOverview = {
     ['assessment_started', 2860, 2410], ['assessment_completed', 2184, 1972], ['share_clicked', 914, 803],
     ['challenge_created', 642, 588], ['challenge_opened', 1088, 951], ['friend_completed', 531, 486],
   ].map(([event, events, visitors]) => ({ event, events, visitors })),
+  productInsights: {
+    assessment: [
+      ['assessment_started', 2860, 2410, 100], ['assessment_completed', 2184, 1972, 81.8],
+      ['share_clicked', 914, 803, 40.7], ['challenge_created', 642, 588, 73.2],
+    ].map(([event, events, visitors, conversion]) => ({ event, events, visitors, conversion })),
+    invite: [
+      ['challenge_opened', 1088, 951, 100], ['friend_completed', 531, 486, 51.1],
+    ].map(([event, events, visitors, conversion]) => ({ event, events, visitors, conversion })),
+    games: [
+      { game: 'reaction', started: 868, completed: 702, players: 633, completionRate: 80.9 },
+      { game: 'image', started: 412, completed: 374, players: 329, completionRate: 90.8 },
+      { game: 'court', started: 308, completed: 272, players: 241, completionRate: 88.3 },
+    ],
+    image: { requests: 412, successes: 374, successRate: 90.8, p95Ms: 18200, averageLatencyMs: 9300 },
+  },
 };
 
 export const demoVisits = {

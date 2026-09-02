@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Icon } from './components/Icon';
+import { postJson } from './app/api';
+import { createImageGenerationTask } from './app/imageGenerationTask';
 import { useAssessmentHistory } from './app/useAssessmentHistory';
 import { AssayPage } from './features/assay/AssayPage';
 import { ResultPage } from './features/result/ResultPage';
@@ -28,11 +30,26 @@ function MobileNav({ page, onNavigate }) {
   return <nav className="mobile-nav" aria-label="移动端主导航">{NAV_ITEMS.map((item) => <button type="button" key={item.id} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.mobileLabel || item.label}</span></button>)}<button type="button" className={page === 'archive' ? 'active' : ''} aria-current={page === 'archive' ? 'page' : undefined} onClick={() => onNavigate('archive')}><Icon name="archive"/><span>我的</span></button></nav>;
 }
 
+function ImageGenerationDock({ job, onOpen, onDismiss }) {
+  if (job.status === 'idle') return null;
+  const running = job.status === 'running';
+  const complete = job.status === 'complete';
+  return <aside className={`image-job-dock ${job.status}`} aria-live="polite">
+    <span className="image-job-mark"><Icon name={running ? 'spark' : complete ? 'image' : 'close'} size={20}/></span>
+    <div><strong>{running ? '奶蛙正在画' : complete ? '抽象现场已送达' : '这张图没画出来'}</strong><small>{running ? '放心去玩别的，画好会叫你。' : complete ? '随时回来查看或下载。' : '回到生图局，换个说法再试。'}</small></div>
+    <button type="button" onClick={onOpen}>{running ? '查看进度' : complete ? '看图' : '去重试'}</button>
+    {!running ? <button type="button" className="image-job-dismiss" aria-label="关闭图片生成提醒" onClick={onDismiss}><Icon name="close" size={17}/></button> : null}
+    {running ? <i aria-hidden="true"><b/></i> : null}
+  </aside>;
+}
+
 export default function App() {
   const initialRoomCode = routeRoomCode();
   const [roomCode, setRoomCode] = useState(initialRoomCode);
   const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'assay');
   const [result, setResult] = useState(null);
+  const imageTask = useMemo(() => createImageGenerationTask((input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(100_000) })), []);
+  const imageJob = useSyncExternalStore(imageTask.subscribe, imageTask.getSnapshot, imageTask.getSnapshot);
   const { history, add, clear } = useAssessmentHistory();
   const latestResult = useMemo(() => result || history.find((item) => item && item.kind !== 'pk') || null, [result, history]);
 
@@ -46,12 +63,18 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const navigate = (nextPage) => {
-    if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
+  const navigate = (nextPage, target = '') => {
+    const nextUrl = target === 'image' ? '/#nailoong-image-studio' : '/';
+    if (`${window.location.pathname}${window.location.hash}` !== nextUrl) window.history.pushState({}, '', nextUrl);
     setRoomCode('');
     setPage(nextPage);
     if (nextPage !== 'assay') setResult(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (target === 'image') window.setTimeout(() => document.getElementById('nailoong-image-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    else window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openImageStudio = () => {
+    navigate('lab', 'image');
   };
 
   const openRoom = (code) => {
@@ -82,11 +105,12 @@ export default function App() {
     <Header page={page} onNavigate={navigate}/>
     {page === 'assay' && result ? <ResultPage result={result} onReset={() => setResult(null)} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'assay' && !result ? <AssayPage onComplete={completeAssessment} onNavigate={navigate}/> : null}
-    {page === 'lab' ? <LabPage latestResult={latestResult} onNavigate={navigate} onReactionComplete={applyReaction}/> : null}
+    {page === 'lab' ? <LabPage latestResult={latestResult} onNavigate={navigate} onReactionComplete={applyReaction} imageTask={imageTask} imageJob={imageJob}/> : null}
     {page === 'hao' ? <HaoPage onNavigate={navigate}/> : null}
     {page === 'friends' ? <FriendsPage roomCode={roomCode} latestResult={latestResult} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'archive' ? <ArchivePage history={history} onSelectHistory={(item) => { setResult(item); setPage('assay'); window.scrollTo({ top: 0 }); }} onClear={clear}/> : null}
     <footer className="editorial-footer"><strong>嘉豪鉴定所</strong><span>原始内容不保存，结果纯属娱乐。</span></footer>
+    <ImageGenerationDock job={imageJob} onOpen={openImageStudio} onDismiss={imageTask.dismiss}/>
     <MobileNav page={page} onNavigate={navigate}/>
   </div>;
 }
