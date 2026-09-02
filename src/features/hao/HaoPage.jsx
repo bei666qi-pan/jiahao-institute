@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
+import { JiahaoPortrait } from '../../components/JiahaoPortrait';
 import { makeFallbackAssessment } from '../../validation';
 import { trackProductEvent } from '../../telemetry';
 
@@ -129,9 +130,9 @@ function HaoPkArena() {
 
 export function HaoPage({ onNavigate }) {
   return <main className="hao-page">
-    <header className="hao-hero"><div><h1>你有多豪？</h1><p>放张照片或一句话进来，看看豪气藏得有多深。</p><button type="button" className="yellow-button" onClick={() => onNavigate('assay')}>测测我有多豪 <Icon name="arrow"/></button></div><img src="/assets/nailoong/arms.webp" alt="抱臂站立的抽象奶蛙"/></header>
+    <header className="hao-hero"><div><h1>你有多豪？</h1><p>放张照片或一句话进来，看看豪气藏得有多深。</p><button type="button" className="yellow-button" onClick={() => onNavigate('assay')}>测测我有多豪 <Icon name="arrow"/></button></div><JiahaoPortrait variant={4} label="戴墨镜穿夹克的嘉豪" className="hao-hero-portrait"/></header>
     <HaoQuoteStudio/>
     <HaoPkArena/>
-    <section className="hao-panel hao-archive-entry"><div className="hao-panel-heading static"><div><strong>嘉豪物种图鉴</strong><small>九种豪气进化路线</small></div><Icon name="archive"/></div><div className="hao-entry-body"><p>自在极意豪、美式嘉豪、计算机嘉豪，你是哪一种？</p><button type="button" className="yellow-button" onClick={() => onNavigate('archive')}>去翻图鉴 <Icon name="arrow"/></button></div></section>
+    <section className="hao-panel hao-archive-entry"><div className="hao-panel-heading static"><div><strong>嘉豪出没图鉴</strong><small>六种高频状态，全员有脸</small></div><Icon name="archive"/></div><div className="hao-entry-body"><p>口罩豪、股票豪、计算机豪，你是哪一种？</p><button type="button" className="yellow-button" onClick={() => onNavigate('archive')}>去翻图鉴 <Icon name="arrow"/></button></div></section>
   </main>;
 }

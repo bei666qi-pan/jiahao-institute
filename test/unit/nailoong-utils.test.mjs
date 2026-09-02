@@ -59,21 +59,25 @@ test('旧鉴定记录升级为legacy-derived且不篡改原对象', () => {
   assert.equal(upgraded.jiahao.type, '潜伏嘉豪');
 });
 
-test('反应局按北京时间日期稳定返回五道不重复且不泄露权重的题', () => {
+test('反应局按北京时间日期稳定返回三套不重复剧本且不泄露权重', () => {
   assert.equal(typeof server.getDailyReactionChallenge, 'function');
-  const first = server.getDailyReactionChallenge('2026-09-02');
-  const again = server.getDailyReactionChallenge('2026-09-02');
+  const first = server.getDailyReactionChallenge('2026-09-02', 0);
+  const again = server.getDailyReactionChallenge('2026-09-02', 0);
+  const decks = [0, 1, 2].map((run) => server.getDailyReactionChallenge('2026-09-02', run));
 
   assert.deepEqual(first, again);
   assert.equal(first.questions.length, 5);
   assert.equal(new Set(first.questions.map((question) => question.id)).size, 5);
-  assert.ok(first.questions.every((question) => question.options.length === 2));
+  assert.equal(new Set(decks.flatMap((deck) => deck.questions.map((question) => question.id))).size, 15);
+  assert.ok(first.questions.every((question) => question.options.length === 3));
+  assert.ok(first.questions.every((question) => question.options.every((option) => option.reaction && option.tone)));
   assert.ok(first.questions.every((question) => question.options.every((option) => !('weights' in option))));
+  assert.notEqual(decks[0].challengeId, decks[1].challengeId);
 });
 
-test('反应局评分只接受题库内选项并按六维权重生成结果', () => {
+test('反应局评分只接受题库内选项并返回本局高光', () => {
   assert.equal(typeof server.scoreReactionAnswers, 'function');
-  const challenge = server.getDailyReactionChallenge('2026-09-02');
+  const challenge = server.getDailyReactionChallenge('2026-09-02', 1);
   const answers = challenge.questions.map((question) => ({
     questionId: question.id,
     optionId: question.options[0].id,
@@ -83,6 +87,9 @@ test('反应局评分只接受题库内选项并按六维权重生成结果', ()
   assert.equal(result.kind, 'reaction');
   assert.equal(result.challengeId, challenge.challengeId);
   assert.equal(result.answerCount, 5);
+  assert.equal(result.run, 1);
+  assert.equal(typeof result.highlight?.reaction, 'string');
+  assert.equal(typeof result.highlight?.asset, 'string');
   assert.ok(result.nailoong.score >= 0 && result.nailoong.score <= 100);
   assert.deepEqual(Object.keys(result.nailoong.dimensions).sort(), [
     'abstractReaction', 'cameraSense', 'deadpan', 'friendPrank', 'hardMouth', 'hungerResilience',

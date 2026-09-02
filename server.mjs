@@ -421,7 +421,7 @@ export const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && pathname === '/api/reactions/daily') {
-      return sendJson(res, 200, getDailyReactionChallenge(url.searchParams.get('date')));
+      return sendJson(res, 200, getDailyReactionChallenge(url.searchParams.get('date'), url.searchParams.get('run')));
     }
     if (req.method === 'POST' && pathname === '/api/reactions/score') {
       const payload = await readJson(req);

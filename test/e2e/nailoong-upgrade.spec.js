@@ -33,13 +33,19 @@ test('抽象实验室可完成五题奶龙反应局', async ({ page }) => {
     ? page.getByRole('button', { name: '实验室', exact: true })
     : page.getByRole('button', { name: '抽象实验室', exact: true });
   await labButton.click();
-  await expect(page.getByRole('heading', { name: '今天抽象点什么？' })).toBeVisible();
+  if (page.viewportSize()?.width > 760) await expect(page.getByRole('heading', { name: '今天抽象点什么？' })).toBeVisible();
   await expect(page.getByText('奶龙反应局')).toBeVisible();
+  await expect(page.locator('.reaction-option')).toHaveCount(3);
 
-  for (let index = 0; index < 5; index += 1) {
+  await page.locator('.reaction-option').nth(1).click();
+  await expect(page.locator('.reaction-flash')).toBeVisible();
+  for (let index = 1; index < 5; index += 1) {
     await page.locator('.reaction-option').first().click();
   }
   await expect(page.getByText('本局奶龙指数')).toBeVisible();
+  await expect(page.getByText('本局高光')).toBeVisible();
+  await page.getByRole('button', { name: /下一套题/ }).click();
+  await expect(page.getByText(/第 2 套/)).toBeVisible();
 });
 
 test('人格档案同时展示嘉豪物种与奶龙人格', async ({ page }) => {
@@ -48,4 +54,5 @@ test('人格档案同时展示嘉豪物种与奶龙人格', async ({ page }) => 
   await expect(page.getByRole('heading', { name: '人格档案' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '嘉豪物种' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '奶龙人格' })).toBeVisible();
+  await expect(page.locator('.jiahao-portrait')).toHaveCount(6);
 });
