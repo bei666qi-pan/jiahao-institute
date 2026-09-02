@@ -31,7 +31,7 @@ export function normalizeImageRequest(payload = {}) {
 
 export function buildAbstractImagePrompt(userPrompt, scene = 'cinematic') {
   const sceneDirection = SCENES[scene] || SCENES.cinematic;
-  return `创作一张中文互联网抽象梗图。严格照搬参考图中的浅黄色软体人偶，不改变它的身体和脸：直立的圆胖大豆包轮廓，头顶与身体两侧完全光滑，没有耳朵、角或尾巴；米白肚皮呈椭圆形，浅绿色凸眼像两个圆盘并带黑色小瞳孔，脸上只有一条短短的细线嘴，没有鼻孔，面部其余位置保持光滑空白；灰褐色手脚，四肢短粗，圆胖肚子占身体大部分，放空又一本正经。这个角色网络称为“抽象奶蛙”，但不是生物青蛙。保持参考图那种低清、柔和、略笨拙的早期3D网络衍生质感。禁止画成官方奶龙或Q萌幼儿动画角色；禁止写实皮肤、蛙嘴、蛙腿、怪物化、尖牙、大嘴、黏液、恶心或恐怖元素。场景方向：${sceneDirection}。用户情境：${userPrompt}。画面不要出现文字、品牌标志或界面。`;
+  return `创作一张中文互联网抽象梗图。把参考图中的浅黄色软体人形玩偶作为唯一角色，严格保持参考图的身体比例、脸和材质，不做任何物种化改造。角色是直立的圆胖大豆包轮廓，头顶与身体两侧完全光滑，没有耳朵、角或尾巴；没有鼻子，没有鼻孔；米白肚皮呈椭圆形并占身体大部分；脸上只能有两只眼睛，两只眼睛都是浅绿色凸眼圆盘加一个黑色小瞳孔，不能增加第二对眼睛或任何圆形鼻孔；脸上只有一条短短的水平细线嘴，嘴始终闭合，不能画嘴唇、口腔、牙齿或外凸口鼻。灰褐色手脚必须像简单圆润的一体化软手套和脚套，不能画成人类写实手脚。四肢短粗，神态放空又一本正经。保持参考图那种低清、柔和、略笨拙的早期3D网络衍生质感。禁止改变角色设计；禁止写实皮肤、动物特征、怪物化、尖牙、大嘴、黏液、恶心或恐怖元素。场景方向：${sceneDirection}。用户情境：${userPrompt}。画面不要出现文字、品牌标志或界面。`;
 }
 
 function providerError(provider, status, details = '') {
@@ -97,6 +97,59 @@ function imageResult(provider, model, data, fallback) {
   };
 }
 
+function extractJsonObject(value) {
+  if (typeof value !== 'string') throw new Error('empty quality response');
+  const start = value.indexOf('{');
+  const end = value.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('invalid quality response');
+  return JSON.parse(value.slice(start, end + 1));
+}
+
+async function assertImageIdentity(result, quality, fetchImpl) {
+  if (!quality?.key || !quality?.url || !quality?.model) return;
+  const image = result.imageDataUrl || result.imageUrl;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 35_000);
+  try {
+    const response = await fetchImpl(quality.url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${quality.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: quality.model,
+        messages: [
+          {
+            role: 'system',
+            content: '你是图片角色一致性质检员。只判断角色身份，不检查构图、动作、道具、文字、水印或背景。只返回 JSON：{"passes":true或false,"reason":"一句短理由"}。必须同时满足：全身是浅黄色圆胖软体人形；米白椭圆肚皮；只有两只浅绿色圆盘眼睛且每只只有一个黑色小瞳孔；只有一条闭合水平细线嘴；灰褐色圆润手套状手掌和脚套是角色的正确特征，应判为合格。出现额外黑眼、鼻子、鼻孔、耳朵、角、尾巴、张嘴、牙齿，或肉色并带清晰五指的写实人类手脚时，passes 必须为 false。',
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '检查这张生成图，只返回 JSON。' },
+              { type: 'image_url', image_url: { url: image } },
+            ],
+          },
+        ],
+        temperature: 0,
+        response_format: { type: 'json_object' },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const verdict = extractJsonObject(data?.choices?.[0]?.message?.content);
+    if (verdict.passes !== true) throw new ImageGenerationError('生成角色与参考图不一致', {
+      statusCode: 503, code: 'IDENTITY_MISMATCH', provider: result.provider, fallbackEligible: true,
+    });
+  } catch (error) {
+    if (error instanceof ImageGenerationError) throw error;
+    throw new ImageGenerationError('图片角色质检暂时不可用', {
+      statusCode: 503, code: 'QUALITY_CHECK_FAILED', provider: result.provider, fallbackEligible: true,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function callMinimax(request, config, referenceImageUrl, fetchImpl) {
   const data = await postImage('minimax', config.url, config.key, {
     model: config.model,
@@ -104,7 +157,7 @@ async function callMinimax(request, config, referenceImageUrl, fetchImpl) {
     aspect_ratio: request.aspectRatio,
     response_format: 'base64',
     n: 1,
-    prompt_optimizer: true,
+    prompt_optimizer: false,
     aigc_watermark: true,
     ...(referenceImageUrl ? { subject_reference: [{ type: 'character', image_file: referenceImageUrl }] } : {}),
   }, fetchImpl);
@@ -134,22 +187,28 @@ export async function generateAbstractImage(payload, config, fetchImpl = fetch) 
   const request = normalizeImageRequest(payload);
   const minimax = config?.minimax || {};
   const volcengine = config?.volcengine || {};
+  const quality = config?.quality || {};
   const referenceImageUrl = config?.referenceImageUrl || '';
+
+  const generateVolcengine = async (fallback) => {
+    const result = await callVolcengine(request, volcengine, referenceImageUrl, fetchImpl, fallback);
+    await assertImageIdentity(result, quality, fetchImpl);
+    return { ...result, aspectRatio: request.aspectRatio };
+  };
 
   if (minimax.key) {
     try {
-      return { ...(await callMinimax(request, minimax, referenceImageUrl, fetchImpl)), aspectRatio: request.aspectRatio };
+      const result = await callMinimax(request, minimax, referenceImageUrl, fetchImpl);
+      await assertImageIdentity(result, quality, fetchImpl);
+      return { ...result, aspectRatio: request.aspectRatio };
     } catch (error) {
       if (!error?.fallbackEligible) throw error;
       if (!volcengine.key) throw error;
       const reason = String(error.code || 'provider_failed').toLowerCase();
-      return { ...(await callVolcengine(request, volcengine, referenceImageUrl, fetchImpl, { used: true, from: 'minimax', reason })), aspectRatio: request.aspectRatio };
+      return generateVolcengine({ used: true, from: 'minimax', reason });
     }
   }
 
   if (!volcengine.key) throw new ImageGenerationError('图片生成服务尚未配置', { statusCode: 503, code: 'NOT_CONFIGURED' });
-  return {
-    ...(await callVolcengine(request, volcengine, referenceImageUrl, fetchImpl, { used: true, from: 'minimax', reason: 'not_configured' })),
-    aspectRatio: request.aspectRatio,
-  };
+  return generateVolcengine({ used: true, from: 'minimax', reason: 'not_configured' });
 }
