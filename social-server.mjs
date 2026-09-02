@@ -4,6 +4,7 @@ import { server } from './server.mjs';
 import { Observability } from './server/observability.mjs';
 import { handleQuoteRequest, QUOTE_SERVICE_VERSION } from './server/quote.mjs';
 import { SocialService, signSocialResult } from './server/social.mjs';
+import { signReactionResult } from './server/reaction-token.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const signingSecret = process.env.SOCIAL_SIGNING_SECRET
@@ -61,6 +62,12 @@ server.on('request', async (req, res) => {
     appendJsonFields(res, () => ({ quoteServiceVersion: QUOTE_SERVICE_VERSION }));
   }
   if (req.method === 'POST' && url.pathname === '/api/analyze') attachResultSignature(res);
+  if (req.method === 'POST' && url.pathname === '/api/reactions/score') {
+    appendJsonFields(res, (payload) => {
+      const credential = signingSecret ? signReactionResult(payload, signingSecret) : null;
+      return credential ? { credential } : {};
+    }, (payload) => payload?.kind === 'reaction');
+  }
   return originalRequestHandler(req, res);
 });
 

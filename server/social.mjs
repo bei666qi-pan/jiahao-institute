@@ -6,10 +6,44 @@ const { Pool } = pg;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ROOM_CODE_RE = /^[A-Z2-9]{6,10}$/;
 const DIMENSION_KEYS = ['mystery', 'flex', 'niche', 'deep', 'show', 'language'];
+const NAILOONG_DIMENSION_KEYS = ['hardMouth', 'deadpan', 'hungerResilience', 'abstractReaction', 'cameraSense', 'friendPrank'];
 const LEVELS = ['清澈普通人', '嘉豪观察对象', '半步嘉豪', '高阶嘉豪', '豪气冲天', '自在极意豪'];
 const TYPES = ['自在极意豪', '美式嘉豪', '深情破碎豪', '计算机嘉豪', '股票嘉豪', '不懂装懂豪', '小众优越豪', '潜伏嘉豪', '反向嘉豪', '无意炫耀豪'];
 const COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
 const BODY_LIMIT = 256 * 1024;
+const ROOM_TASKS = [
+  { id: 'hard-mouth-v1', title: '用一句话证明你嘴硬' },
+  { id: 'deadpan-v1', title: '发一句让群聊安静三秒的话' },
+  { id: 'hunger-v1', title: '描述一次“我不饿”的失败现场' },
+  { id: 'camera-v1', title: '给自己的镜头感找一个借口' },
+  { id: 'friend-prank-v1', title: '给损友起一个抽象人格称号' },
+  { id: 'abstract-reaction-v1', title: '写下你最离谱的临场反应' },
+  { id: 'calm-v1', title: '用最淡定的语气说一件大事' },
+];
+
+export function getDailyRoomTask(dateValue) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || ''))
+    ? String(dateValue)
+    : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
+  return { ...ROOM_TASKS[((day % ROOM_TASKS.length) + ROOM_TASKS.length) % ROOM_TASKS.length], date, points: 3 };
+}
+
+export function compareRoomMembers(a, b) {
+  const verifiedGap = Number(Boolean(b.verified)) - Number(Boolean(a.verified));
+  if (verifiedGap) return verifiedGap;
+  const pointsGap = Number(b.season_points || 0) - Number(a.season_points || 0);
+  if (pointsGap) return pointsGap;
+  const compositeGap = Number(b.composite_score ?? b.score ?? 0) - Number(a.composite_score ?? a.score ?? 0);
+  if (compositeGap) return compositeGap;
+  return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
+}
+
+export function pointsForBattleOutcome(winner) {
+  if (winner === 'A') return { challenger: 2, opponent: 1 };
+  if (winner === 'B') return { challenger: 1, opponent: 2 };
+  return { challenger: 1, opponent: 1 };
+}
 
 function cleanText(value, fallback = '', max = 40) {
   const text = typeof value === 'string' ? value.trim().replace(/[<>\u0000-\u001f]/g, '') : '';
@@ -25,9 +59,22 @@ function normalizeDimensions(value = {}) {
   return Object.fromEntries(DIMENSION_KEYS.map((key) => [key, clampScore(value?.[key])]));
 }
 
+function normalizeNailoong(raw = {}) {
+  const dimensions = Object.fromEntries(NAILOONG_DIMENSION_KEYS.map((key) => [key, clampScore(raw?.dimensions?.[key])]));
+  const score = clampScore(raw?.score);
+  return {
+    score,
+    level: cleanText(raw?.level, score >= 80 ? '奶龙显形' : score >= 60 ? '奶气在线' : score >= 40 ? '奶龙观察对象' : '暂未奶化', 24),
+    archetype: cleanText(raw?.archetype, '淡人型奶龙豪', 32),
+    dimensions,
+  };
+}
+
 function normalizePublicResult(raw = {}, verified = false) {
   const score = clampScore(raw.score);
   const inferredLevel = score >= 95 ? '自在极意豪' : score >= 80 ? '豪气冲天' : score >= 60 ? '高阶嘉豪' : score >= 40 ? '半步嘉豪' : score >= 20 ? '嘉豪观察对象' : '清澈普通人';
+  const schemaVersion = Number(raw.schemaVersion) === 2 && raw.nailoong ? 2 : 1;
+  const nailoong = schemaVersion === 2 ? normalizeNailoong(raw.nailoong) : null;
   return {
     resultId: cleanText(raw.id, `嘉豪-${createHash('sha256').update(JSON.stringify(raw)).digest('hex').slice(0, 8)}`, 48),
     score,
@@ -36,6 +83,11 @@ function normalizePublicResult(raw = {}, verified = false) {
     dimensions: normalizeDimensions(raw.dimensions),
     source: cleanText(raw.source, verified ? '云端大模型' : '豪之算法', 40),
     verified,
+    ...(schemaVersion === 2 ? {
+      schemaVersion,
+      nailoong,
+      compositeScore: Math.round((score + nailoong.score) / 2),
+    } : {}),
   };
 }
 
@@ -52,6 +104,10 @@ export function signSocialResult(result, secret) {
     type: normalized.type,
     dimensions: normalized.dimensions,
     source: normalized.source,
+    ...(normalized.schemaVersion === 2 ? {
+      schemaVersion: 2,
+      nailoong: normalized.nailoong,
+    } : {}),
     issuedAt: Date.now(),
   });
   const signature = createHmac('sha256', secret).update(payload).digest('base64url');
@@ -111,6 +167,12 @@ function createCode() {
 }
 
 function publicMember(row) {
+  const nailoong = Number(row.schema_version) === 2 ? {
+    score: Number(row.nailoong_score || 0),
+    level: row.nailoong_level,
+    archetype: row.nailoong_archetype,
+    dimensions: row.nailoong_dimensions || {},
+  } : null;
   return {
     memberId: row.member_id,
     nickname: row.nickname,
@@ -120,6 +182,10 @@ function publicMember(row) {
     dimensions: row.dimensions || {},
     verified: Boolean(row.verified),
     source: row.source,
+    schemaVersion: Number(row.schema_version || 1),
+    nailoong,
+    compositeScore: Number(row.composite_score ?? row.score),
+    seasonPoints: Number(row.season_points || 0),
     joinedAt: row.joined_at,
     rank: Number(row.rank),
     isSelf: Boolean(row.is_self),
@@ -225,10 +291,13 @@ export class SocialService {
     if (!roomResult.rowCount) throw Object.assign(new Error('好友榜不存在或链接无效'), { statusCode: 404 });
     const room = roomResult.rows[0];
     const members = await this.query(`select m.*,
-      row_number() over (order by m.verified desc, m.score desc, m.joined_at asc) as rank,
+      row_number() over (order by m.verified desc, m.season_points desc, m.composite_score desc, m.joined_at asc) as rank,
       (m.visitor_id = $2) as is_self
       from jh_room_members m where m.room_id = $1
-      order by m.verified desc, m.score desc, m.joined_at asc`, [room.room_id, visitorId]);
+      order by m.verified desc, m.season_points desc, m.composite_score desc, m.joined_at asc`, [room.room_id, visitorId]);
+    const task = await this.query(`select 1 from jh_room_task_attempts
+      where room_id=$1 and visitor_id=$2 and task_date=(now() at time zone 'Asia/Shanghai')::date
+      limit 1`, [room.room_id, visitorId]);
     const scores = members.rows.map((row) => Number(row.score));
     return {
       room: {
@@ -247,6 +316,8 @@ export class SocialService {
       },
       members: members.rows.map(publicMember),
       isMember: members.rows.some((row) => row.visitor_id === visitorId),
+      todayTaskCompleted: Boolean(task.rowCount),
+      dailyTask: getDailyRoomTask(),
     };
   }
 
@@ -254,7 +325,7 @@ export class SocialService {
     const result = this.resolveResult(payload);
     const name = cleanText(payload.name, '好友豪气榜', 40);
     const nickname = cleanText(payload.nickname, '匿名嘉豪', 24);
-    const roomType = ['friends', 'dorm', 'pk'].includes(payload.roomType) ? payload.roomType : 'friends';
+    const roomType = ['friends', 'dorm', 'pk', 'challenge'].includes(payload.roomType) ? payload.roomType : 'friends';
     const memberLimit = Math.max(2, Math.min(50, Math.round(Number(payload.memberLimit || (roomType === 'dorm' ? 8 : 20)))));
     const activeRooms = await this.query("select count(*)::int count from jh_rooms where owner_visitor_id = $1 and status = 'active' and expires_at > now()", [visitorId]);
     if (Number(activeRooms.rows[0]?.count || 0) >= 10) throw Object.assign(new Error('最多同时创建 10 个有效好友榜'), { statusCode: 429 });
@@ -276,9 +347,12 @@ export class SocialService {
         values ($1,$2,$3,$4,$5,$6,$7,now() + interval '7 days')`,
       [roomId, code, visitorId, name, roomType, memberLimit, payload.allowPk !== false]);
       await client.query(`insert into jh_room_members
-        (member_id, room_id, visitor_id, nickname, result_id, score, level, type, dimensions, verified, source)
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)`,
-      [randomUUID(), roomId, visitorId, nickname, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source]);
+        (member_id, room_id, visitor_id, nickname, result_id, score, level, type, dimensions, verified, source,
+         schema_version, nailoong_score, nailoong_level, nailoong_archetype, nailoong_dimensions, composite_score)
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16::jsonb,$17)`,
+      [randomUUID(), roomId, visitorId, nickname, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source,
+        result.schemaVersion || 1, result.nailoong?.score ?? null, result.nailoong?.level ?? null, result.nailoong?.archetype ?? null,
+        JSON.stringify(result.nailoong?.dimensions || {}), result.compositeScore ?? result.score]);
       await client.query('commit');
       return { code };
     } catch (error) {
@@ -302,13 +376,20 @@ export class SocialService {
         const count = await client.query('select count(*)::int count from jh_room_members where room_id = $1', [room.room_id]);
         if (Number(count.rows[0].count) >= Number(room.member_limit)) throw Object.assign(new Error('好友榜人数已满'), { statusCode: 409 });
         await client.query(`insert into jh_room_members
-          (member_id, room_id, visitor_id, nickname, result_id, score, level, type, dimensions, verified, source)
-          values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)`,
-        [randomUUID(), room.room_id, visitorId, nickname, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source]);
+          (member_id, room_id, visitor_id, nickname, result_id, score, level, type, dimensions, verified, source,
+           schema_version, nailoong_score, nailoong_level, nailoong_archetype, nailoong_dimensions, composite_score)
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16::jsonb,$17)`,
+        [randomUUID(), room.room_id, visitorId, nickname, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source,
+          result.schemaVersion || 1, result.nailoong?.score ?? null, result.nailoong?.level ?? null, result.nailoong?.archetype ?? null,
+          JSON.stringify(result.nailoong?.dimensions || {}), result.compositeScore ?? result.score]);
       } else {
         await client.query(`update jh_room_members set nickname=$3, result_id=$4, score=$5, level=$6, type=$7,
-          dimensions=$8::jsonb, verified=$9, source=$10, updated_at=now() where room_id=$1 and visitor_id=$2`,
-        [room.room_id, visitorId, nickname, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source]);
+          dimensions=$8::jsonb, verified=$9, source=$10, schema_version=$11, nailoong_score=$12, nailoong_level=$13,
+          nailoong_archetype=$14, nailoong_dimensions=$15::jsonb, composite_score=$16, updated_at=now()
+          where room_id=$1 and visitor_id=$2`,
+        [room.room_id, visitorId, nickname, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source,
+          result.schemaVersion || 1, result.nailoong?.score ?? null, result.nailoong?.level ?? null, result.nailoong?.archetype ?? null,
+          JSON.stringify(result.nailoong?.dimensions || {}), result.compositeScore ?? result.score]);
       }
       await client.query(`insert into jh_social_profiles (visitor_id, nickname) values ($1, $2)
         on conflict (visitor_id) do update set nickname = excluded.nickname, updated_at = now()`, [visitorId, nickname]);
@@ -323,9 +404,12 @@ export class SocialService {
   async updateScore(code, visitorId, payload) {
     const result = this.resolveResult(payload);
     const updated = await this.query(`update jh_room_members m set result_id=$3, score=$4, level=$5, type=$6,
-      dimensions=$7::jsonb, verified=$8, source=$9, updated_at=now()
+      dimensions=$7::jsonb, verified=$8, source=$9, schema_version=$10, nailoong_score=$11,
+      nailoong_level=$12, nailoong_archetype=$13, nailoong_dimensions=$14::jsonb, composite_score=$15, updated_at=now()
       from jh_rooms r where m.room_id=r.room_id and r.code=$1 and m.visitor_id=$2 returning m.member_id`,
-    [code, visitorId, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source]);
+    [code, visitorId, result.resultId, result.score, result.level, result.type, JSON.stringify(result.dimensions), result.verified, result.source,
+      result.schemaVersion || 1, result.nailoong?.score ?? null, result.nailoong?.level ?? null, result.nailoong?.archetype ?? null,
+      JSON.stringify(result.nailoong?.dimensions || {}), result.compositeScore ?? result.score]);
     if (!updated.rowCount) throw Object.assign(new Error('你还没有加入这个好友榜'), { statusCode: 403 });
     return { updated: true };
   }
@@ -361,7 +445,37 @@ export class SocialService {
       (match_id, room_id, challenger_member_id, opponent_member_id, winner_member_id, result)
       values ($1,$2,$3,$4,$5,$6::jsonb)`,
     [randomUUID(), room.rows[0].room_id, challenger.member_id, opponent.member_id, winnerMemberId, JSON.stringify(battle)]);
+    const points = pointsForBattleOutcome(battle.battle.winner);
+    await this.query(`update jh_room_members set season_points = season_points +
+      case when member_id=$2 then $4::int when member_id=$3 then $5::int else 0 end, updated_at=now()
+      where room_id=$1 and member_id in ($2,$3)`, [room.rows[0].room_id, challenger.member_id, opponent.member_id, points.challenger, points.opponent]);
     return battle;
+  }
+
+  async completeTask(code, visitorId, payload) {
+    const taskId = cleanText(payload.taskId, '', 48);
+    const dailyTask = getDailyRoomTask();
+    if (!taskId || taskId !== dailyTask.id) throw Object.assign(new Error('今日任务已轮换，请刷新后重试'), { statusCode: 400 });
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const member = await client.query(`select m.member_id, m.room_id from jh_room_members m
+        join jh_rooms r on r.room_id=m.room_id
+        where r.code=$1 and r.status='active' and r.expires_at>now() and m.visitor_id=$2 for update`, [code, visitorId]);
+      if (!member.rowCount) throw Object.assign(new Error('加入有效好友房后才能完成任务'), { statusCode: 403 });
+      const row = member.rows[0];
+      const inserted = await client.query(`insert into jh_room_task_attempts
+        (attempt_id, room_id, member_id, visitor_id, task_date, task_id, points)
+        values ($1,$2,$3,$4,(now() at time zone 'Asia/Shanghai')::date,$5,3)
+        on conflict (room_id, visitor_id, task_date) do nothing returning attempt_id`,
+      [randomUUID(), row.room_id, row.member_id, visitorId, taskId]);
+      if (inserted.rowCount) await client.query('update jh_room_members set season_points=season_points+3, updated_at=now() where member_id=$1', [row.member_id]);
+      await client.query('commit');
+      return { completed: true, awarded: Boolean(inserted.rowCount), points: inserted.rowCount ? 3 : 0 };
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally { client.release(); }
   }
 
   async handle(req, res, url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)) {
@@ -385,7 +499,7 @@ export class SocialService {
         sendJson(res, 201, result, cookies);
         return true;
       }
-      const match = url.pathname.match(/^\/api\/social\/rooms\/([A-Z2-9]{6,10})(?:\/(join|score|leave|close|pk))?$/i);
+      const match = url.pathname.match(/^\/api\/social\/rooms\/([A-Z2-9]{6,10})(?:\/(join|score|leave|close|pk|task))?$/i);
       if (!match) {
         sendJson(res, 404, { error: '好友榜接口不存在' }, cookies);
         return true;
@@ -398,12 +512,13 @@ export class SocialService {
         return true;
       }
       if (req.method !== 'POST') throw Object.assign(new Error('不支持的请求方式'), { statusCode: 405 });
-      const payload = ['join', 'score', 'pk'].includes(action) ? await readJson(req) : {};
+      const payload = ['join', 'score', 'pk', 'task'].includes(action) ? await readJson(req) : {};
       if (action === 'join') sendJson(res, 200, await this.joinRoom(code, visitorId, payload), cookies);
       else if (action === 'score') sendJson(res, 200, await this.updateScore(code, visitorId, payload), cookies);
       else if (action === 'leave') sendJson(res, 200, await this.leaveRoom(code, visitorId), cookies);
       else if (action === 'close') sendJson(res, 200, await this.closeRoom(code, visitorId), cookies);
       else if (action === 'pk') sendJson(res, 200, await this.pk(code, visitorId, payload), cookies);
+      else if (action === 'task') sendJson(res, 200, await this.completeTask(code, visitorId, payload), cookies);
       else throw Object.assign(new Error('好友榜操作不存在'), { statusCode: 404 });
       return true;
     } catch (error) {

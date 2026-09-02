@@ -147,3 +147,10 @@ code, time, .metric-item strong, .change { font-variant-numeric: tabular-nums; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+.funnel-panel { margin-top: 18px; padding: 24px; border: 1px solid var(--line, #d7dce3); background: #fff; }
+.funnel-panel h2 { margin: 0; }
+.funnel-panel > p { margin: 6px 0 18px; color: #6b7280; font-size: 13px; }
+.funnel-panel > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); border: 1px solid #d7dce3; }
+.funnel-panel article { display: grid; gap: 4px; padding: 15px; border-right: 1px solid #d7dce3; }
+.funnel-panel article strong { font-size: 26px; }
+.funnel-panel article small { color: #6b7280; }

@@ -9,6 +9,12 @@ const SESSION_MAX_AGE_SECONDS = 30 * 60;
 const VISITOR_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BOT_RE = /bot|crawler|spider|slurp|headless|lighthouse|monitoring|uptime|preview/i;
+const PRODUCT_EVENT_NAMES = new Set([
+  'assessment_started', 'assessment_completed', 'share_clicked', 'challenge_created',
+  'challenge_opened', 'friend_completed', 'lab_game_started', 'lab_game_completed',
+  'room_created', 'room_joined',
+]);
+const PRODUCT_PROPERTY_KEYS = new Set(['mode', 'source', 'roomType', 'game', 'schemaVersion', 'outcome']);
 
 const RANGE_OPTIONS = {
   '24h': { milliseconds: 24 * 60 * 60 * 1000, bucket: 'hour' },
@@ -126,6 +132,20 @@ function metric(value, previous) {
   return { value: currentNumber, previous: previousNumber, change: percentChange(currentNumber, previousNumber) };
 }
 
+export function normalizeProductEvent(payload = {}) {
+  const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+  if (!PRODUCT_EVENT_NAMES.has(name)) return null;
+  const raw = payload.properties && typeof payload.properties === 'object' && !Array.isArray(payload.properties)
+    ? payload.properties : {};
+  const properties = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!PRODUCT_PROPERTY_KEYS.has(key)) continue;
+    if (!['string', 'number', 'boolean'].includes(typeof value)) continue;
+    properties[key] = typeof value === 'string' ? value.slice(0, 40) : value;
+  }
+  return { name, properties };
+}
+
 export class Observability {
   constructor(env = process.env) {
     this.databaseUrl = env.DATABASE_URL || '';
@@ -226,6 +246,19 @@ export class Observability {
     return result.rowCount > 0;
   }
 
+  async recordProductEvent(req, payload = {}) {
+    const event = normalizeProductEvent(payload);
+    if (!event) return { accepted: false };
+    if (!this.enabled || BOT_RE.test(req.headers['user-agent'] || '')) return { accepted: true, stored: false };
+    const cookies = parseCookies(req);
+    const visitorId = UUID_RE.test(cookies.jh_vid || '') ? cookies.jh_vid : null;
+    const sessionId = UUID_RE.test(cookies.jh_sid || '') ? cookies.jh_sid : null;
+    await this.query(`insert into jh_product_events
+      (event_id, visitor_id, session_id, event_name, properties)
+      values ($1,$2,$3,$4,$5::jsonb)`, [randomUUID(), visitorId, sessionId, event.name, JSON.stringify(event.properties)]);
+    return { accepted: true, stored: true };
+  }
+
   async recordApiRequest(req, event) {
     if (!this.enabled) return;
     const cookies = parseCookies(req);
@@ -261,7 +294,7 @@ export class Observability {
       coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros,
       count(*) filter (where pricing_configured)::bigint priced_requests
       from jh_api_requests where occurred_at >= $1 and occurred_at < $2`;
-    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors] = await Promise.all([
+    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel] = await Promise.all([
       this.query(trafficSql, [range.start, range.end]),
       this.query(trafficSql, [range.previousStart, range.start]),
       this.query(apiSql, [range.start, range.end]),
@@ -284,6 +317,9 @@ export class Observability {
       this.query(`select endpoint, status_code, error_code, error_message, occurred_at
         from jh_api_requests where ok = false and occurred_at >= $1 and occurred_at < $2
         order by occurred_at desc limit 5`, [range.start, range.end]),
+      this.query(`select event_name, count(*)::bigint events, count(distinct visitor_id)::bigint visitors
+        from jh_product_events where created_at >= $1 and created_at < $2
+        group by event_name order by events desc`, [range.start, range.end]),
     ]);
     const t = currentTraffic.rows[0]; const pt = previousTraffic.rows[0];
     const a = currentApi.rows[0]; const pa = previousApi.rows[0];
@@ -312,6 +348,7 @@ export class Observability {
       providers: providers.rows.map((row) => ({ ...row, requests: number(row.requests), estimatedCostMicros: number(row.estimated_cost_micros), pricedRequests: number(row.priced_requests) })),
       endpoints: endpoints.rows.map((row) => ({ endpoint: row.endpoint, requests: number(row.requests), successRate: number(row.successes) / Math.max(1, number(row.requests)) * 100, p95Ms: number(row.p95_ms), estimatedCostMicros: number(row.estimated_cost_micros) })),
       recentErrors: errors.rows,
+      productFunnel: productFunnel.rows.map((row) => ({ event: row.event_name, events: number(row.events), visitors: number(row.visitors) })),
     };
   }
 

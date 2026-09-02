@@ -167,6 +167,11 @@ function Topbar({ title, range, onRange, onRefresh, onLogout, busy, headingRef }
 
 function Overview({ data }) {
   const t = data.traffic; const a = data.api;
+  const funnelLabels = {
+    assessment_started: '开始鉴定', assessment_completed: '完成鉴定', share_clicked: '点击分享',
+    challenge_created: '创建挑战', challenge_opened: '打开邀请', friend_completed: '好友完成',
+    lab_game_started: '实验室开局', lab_game_completed: '实验室完成', room_created: '创建房间', room_joined: '加入房间',
+  };
   return <div className="overview-page">
     <section className="primary-metrics" aria-label="重点流量指标">
       <Metric label="访问人数" value={formatNumber(t.visitors.value)} change={t.visitors.change} icon="users" />
@@ -181,6 +186,7 @@ function Overview({ data }) {
         <Metric label="跳出率" value={`${formatNumber(t.bounceRate.value, 1)}%`} change={t.bounceRate.change} inverse />
       </div>
     </section>
+    <section className="funnel-panel"><h2>增长漏斗</h2><p>仅统计事件次数与匿名访客数，不记录用户提交内容。</p><div>{(data.productFunnel || []).map((row) => <article key={row.event}><span>{funnelLabels[row.event] || row.event}</span><strong>{formatNumber(row.events)}</strong><small>{formatNumber(row.visitors)} 位访客</small></article>)}</div>{data.productFunnel?.length ? null : <Empty />}</section>
     <section className="api-panel"><h2>接口与模型成本</h2>
       <div className="api-metrics">
         <Metric label="API 请求" value={formatNumber(a.requests.value)} change={a.requests.change} />

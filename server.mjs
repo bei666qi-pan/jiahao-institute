@@ -6,6 +6,18 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { calculateEstimatedCost, Observability } from './server/observability.mjs';
 import { loginAdmin, logoutAdmin, verifyAdmin } from './server/admin-auth.mjs';
+import {
+  buildAssessmentV2,
+  calculateJiahaoScore,
+  getDailyReactionChallenge,
+  jiahaoLevelFor,
+  normalizeAssessmentDimensions,
+  scoreReactionAnswers,
+  upgradeLegacyAssessment,
+} from './server/nailoong.mjs';
+
+export { buildAssessmentV2, calculateJiahaoScore, getDailyReactionChallenge, jiahaoLevelFor, normalizeAssessmentDimensions, scoreReactionAnswers, upgradeLegacyAssessment } from './server/nailoong.mjs';
+export { signReactionResult, verifyReactionResultToken } from './server/reaction-token.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
@@ -43,7 +55,7 @@ const SYSTEM_PROMPT = `你是“嘉豪鉴定所”的娱乐鉴定官。你的任
   "type": "从给定物种中选一个",
   "level": "清澈普通人/嘉豪观察对象/半步嘉豪/高阶嘉豪/豪气冲天/自在极意豪",
   "verdict": "一句20到45字的鉴定结论",
-  "dimensions": {"mystery":整数,"flex":整数,"niche":整数,"deep":整数,"show":整数,"language":整数},
+  "dimensions": {"mystery":0到100整数,"flex":0到100整数,"niche":0到100整数,"deep":0到100整数,"show":0到100整数,"language":0到100整数},
   "traits": ["四个具体短特征"],
   "evidence": ["三条基于输入内容的具体判定依据"],
   "comment": "50到100字、具体口语化、有包袱的朋友式锐评"
@@ -209,7 +221,11 @@ async function analyzeWithModel(payload) {
   const content = [{ type: 'text', text: `鉴定方式：${modeLabel}\n用户内容：${userText}\n文件提取内容：${extractedText || '无'}\n请严格按要求生成娱乐鉴定 JSON。` }];
   for (const image of validImages(payload.images)) content.push({ type: 'image_url', image_url: { url: image } });
   const modelResponse = await requestModel(provider, SYSTEM_PROMPT, content);
-  return { data: { ...normalizeResult(modelResponse.output), source: provider.source }, usage: modelResponse.usage, provider };
+  const signals = normalizeResult(modelResponse.output);
+  const dimensions = normalizeAssessmentDimensions(signals.dimensions);
+  const score = calculateJiahaoScore(dimensions);
+  const ruledResult = { ...signals, dimensions, score, level: jiahaoLevelFor(score), source: `${provider.source} · 规则计分` };
+  return { data: buildAssessmentV2(ruledResult, 'signals-rules-v1'), usage: modelResponse.usage, provider };
 }
 
 async function analyzePkWithModel(payload) {
@@ -326,6 +342,10 @@ export const server = createServer(async (req, res) => {
       res.writeHead(204, { 'Cache-Control': 'no-store' });
       return res.end();
     }
+    if (req.method === 'POST' && pathname === '/api/telemetry/event') {
+      const result = await observability.recordProductEvent(req, await readJson(req));
+      return sendJson(res, result.accepted ? 202 : 400, result.accepted ? { accepted: true } : { error: '未知增长事件' });
+    }
 
     if (req.method === 'POST' && pathname === '/api/admin/login') {
       const result = await loginAdmin(req, observability, ADMIN_PASSWORD);
@@ -354,8 +374,17 @@ export const server = createServer(async (req, res) => {
       return sendJson(res, 404, { error: '后台接口不存在' });
     }
 
+    if (req.method === 'GET' && pathname === '/api/reactions/daily') {
+      return sendJson(res, 200, getDailyReactionChallenge(url.searchParams.get('date')));
+    }
+    if (req.method === 'POST' && pathname === '/api/reactions/score') {
+      const payload = await readJson(req);
+      return sendJson(res, 200, scoreReactionAnswers(payload.challengeId, payload.answers, payload.date));
+    }
+
     if (req.method === 'POST' && pathname === '/api/analyze') return handleModelRequest(req, res, pathname, analyzeWithModel);
     if (req.method === 'POST' && pathname === '/api/pk') return handleModelRequest(req, res, pathname, analyzePkWithModel);
+    if (req.method === 'POST' && pathname === '/api/court') return handleModelRequest(req, res, pathname, analyzePkWithModel);
     if (req.method === 'POST' && pathname === '/api/quote') return handleModelRequest(req, res, pathname, generateQuoteWithModel);
     if (req.method === 'GET' || req.method === 'HEAD') return await serveStatic(req, res);
     return sendJson(res, 405, { error: '不支持的请求方式' });
