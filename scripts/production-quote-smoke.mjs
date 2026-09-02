@@ -26,22 +26,22 @@ try {
   }
   if (!loaded) throw lastNavigationError || new Error('生产页面无法加载');
 
-  const quoteNav = page.locator('.site-header nav button', { hasText: '语录生成器' });
-  await quoteNav.waitFor({ state: 'visible', timeout: 15_000 });
-  await quoteNav.click();
+  const labNav = page.getByRole('button', { name: '抽象实验室', exact: true });
+  await labNav.waitFor({ state: 'visible', timeout: 15_000 });
+  await labNav.click();
+  await page.getByRole('button', { name: /嘴硬翻译器/ }).click();
 
-  const input = page.getByLabel('要转换的原句');
+  const input = page.getByLabel('嘴硬翻译原句');
   await input.waitFor({ state: 'visible', timeout: 10_000 });
   await input.fill(INPUT);
 
-  const output = page.locator('.quote-output blockquote');
-  const before = (await output.textContent())?.trim() || '';
+  const output = page.locator('.translator-body blockquote');
   const [response] = await Promise.all([
     page.waitForResponse(
       (candidate) => candidate.url().endsWith('/api/quote') && candidate.request().method() === 'POST',
       { timeout: 70_000 },
     ),
-    page.locator('button.quote-generate').click(),
+    page.getByRole('button', { name: '开始嘴硬' }).click(),
   ]);
 
   const body = await response.json();
@@ -52,15 +52,12 @@ try {
   if (generated.length < 12) throw new Error(`凡人之血豪化幅度不足: ${JSON.stringify(body)}`);
   if (generated === INPUT) throw new Error('凡人之血被原样返回');
   if (!/(凡人|之血|凡.*血)/.test(generated)) throw new Error(`豪化结果丢失原句核心意象: ${generated}`);
-  if (generated === before) throw new Error('生成后输出未发生变化');
-
   await output.waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForFunction(
     ({ selector, expected }) => document.querySelector(selector)?.textContent?.trim() === expected,
-    { selector: '.quote-output blockquote', expected: generated },
+    { selector: '.translator-body blockquote', expected: generated },
     { timeout: 10_000 },
   );
-  await page.getByText('云端分析已完成').waitFor({ state: 'visible', timeout: 10_000 });
 
   if (pageErrors.length) throw new Error(`页面脚本错误: ${pageErrors.join(' | ')}`);
   console.log(`凡人之血生产豪化通过：HTTP ${response.status()}，服务版本 ${body.serviceVersion}，来源 ${body.source}，输出 ${generated}`);
