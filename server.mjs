@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { calculateEstimatedCost, Observability } from './server/observability.mjs';
 import { loginAdmin, logoutAdmin, verifyAdmin } from './server/admin-auth.mjs';
 import { generateAbstractImage } from './server/image-generation.mjs';
+import { resolveTextProvider } from './server/text-provider.mjs';
 import {
   buildAssessmentV2,
   calculateJiahaoScore,
@@ -22,9 +23,7 @@ export { signReactionResult, verifyReactionResultToken } from './server/reaction
 
 const PORT = Number(process.env.PORT || 8080);
 const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
-const TEXT_API_BASE = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
-const TEXT_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
-const TEXT_API_KEY = process.env.DEEPSEEK_API_KEY;
+const TEXT_PROVIDER = resolveTextProvider(process.env);
 const VISION_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
 const VISION_API_KEY = process.env.ARK_API_KEY;
@@ -203,8 +202,7 @@ function getProvider(isVision) {
       prices: { input: process.env.ARK_INPUT_CNY_PER_MILLION, output: process.env.ARK_OUTPUT_CNY_PER_MILLION, cachedInput: process.env.ARK_CACHED_INPUT_CNY_PER_MILLION },
     }
     : {
-      id: 'deepseek', base: TEXT_API_BASE, model: TEXT_MODEL, key: TEXT_API_KEY, source: '云端文字大模型',
-      prices: { input: process.env.DEEPSEEK_INPUT_CNY_PER_MILLION, output: process.env.DEEPSEEK_OUTPUT_CNY_PER_MILLION, cachedInput: process.env.DEEPSEEK_CACHED_INPUT_CNY_PER_MILLION },
+      ...TEXT_PROVIDER,
     };
 }
 
@@ -366,9 +364,9 @@ export const server = createServer(async (req, res) => {
     const pathname = url.pathname;
     if (req.method === 'GET' && pathname === '/healthz') return sendJson(res, 200, {
       status: 'ok',
-      textModelConfigured: Boolean(TEXT_API_KEY),
+      textModelConfigured: Boolean(TEXT_PROVIDER.key),
       visionModelConfigured: Boolean(VISION_API_KEY),
-      textModel: TEXT_MODEL,
+      textModel: TEXT_PROVIDER.model,
       visionModel: VISION_MODEL,
       imageGeneration: {
         minimaxConfigured: Boolean(IMAGE_CONFIG.minimax.key),
@@ -414,8 +412,8 @@ export const server = createServer(async (req, res) => {
       }));
       if (req.method === 'GET' && pathname === '/api/admin/costs') return sendJson(res, 200, await observability.costs(range));
       if (req.method === 'GET' && pathname === '/api/admin/status') return sendJson(res, 200, observability.status({
-        textModelConfigured: Boolean(TEXT_API_KEY), visionModelConfigured: Boolean(VISION_API_KEY),
-        adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_MODEL, visionModel: VISION_MODEL,
+        textModelConfigured: Boolean(TEXT_PROVIDER.key), visionModelConfigured: Boolean(VISION_API_KEY),
+        adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_PROVIDER.model, visionModel: VISION_MODEL,
       }));
       return sendJson(res, 404, { error: '后台接口不存在' });
     }

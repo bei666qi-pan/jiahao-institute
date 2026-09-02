@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { calculateEstimatedCost } from './observability.mjs';
+import { resolveTextProvider } from './text-provider.mjs';
 
 export const QUOTE_SERVICE_VERSION = 5;
 
@@ -238,18 +239,7 @@ export function makeCalibratedHaoQuote(payload) {
 }
 
 export function getQuoteProvider(env = process.env) {
-  return {
-    id: 'deepseek',
-    base: (env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
-    model: env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
-    key: env.DEEPSEEK_API_KEY || '',
-    source: '云端文字大模型',
-    prices: {
-      input: env.DEEPSEEK_INPUT_CNY_PER_MILLION,
-      output: env.DEEPSEEK_OUTPUT_CNY_PER_MILLION,
-      cachedInput: env.DEEPSEEK_CACHED_INPUT_CNY_PER_MILLION,
-    },
-  };
+  return resolveTextProvider(env);
 }
 
 function shortInputHint(payload) {

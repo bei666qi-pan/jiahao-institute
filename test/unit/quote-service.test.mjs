@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertQuoteQuality,
+  getQuoteProvider,
   makeCalibratedHaoQuote,
   mergeQuoteUsage,
   normalizeQuotePayload,
@@ -15,6 +16,21 @@ const env = {
   DEEPSEEK_API_KEY: 'test-secret',
   DEEPSEEK_MODEL: 'test-model',
 };
+
+test('MiniMax credentials take priority for text generation', () => {
+  const provider = getQuoteProvider({
+    MINIMAX_API_KEY: 'minimax-secret',
+    MINIMAX_TEXT_BASE_URL: 'https://api.minimax.cn/v1/',
+    MINIMAX_TEXT_MODEL: 'MiniMax-M3',
+    DEEPSEEK_API_KEY: 'deepseek-secret',
+  });
+  assert.deepEqual({ id: provider.id, base: provider.base, model: provider.model, key: provider.key }, {
+    id: 'minimax',
+    base: 'https://api.minimax.cn/v1',
+    model: 'MiniMax-M3',
+    key: 'minimax-secret',
+  });
+});
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
