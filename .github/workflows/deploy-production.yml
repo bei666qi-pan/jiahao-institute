@@ -134,16 +134,18 @@ jobs:
         run: |
           set -euo pipefail
           repository_url="https://gitee.com/${GITEE_REPOSITORY}.git"
-          before_sha=$(git ls-remote "${repository_url}" refs/heads/master | awk '{print $1}')
+          basic_auth=$(printf '%s:%s' "${GITEE_USER}" "${GITEE_TOKEN}" | base64 | tr -d '\n')
+          echo "::add-mask::${basic_auth}"
+          before_sha=$(git -c http.https://gitee.com/.extraheader="AUTHORIZATION: Basic ${basic_auth}" \
+            ls-remote "${repository_url}" refs/heads/master | awk '{print $1}')
           if [ "${before_sha}" = "${TARGET_SHA}" ]; then
             echo "Gitee master already points to ${TARGET_SHA}."
           else
-            basic_auth=$(printf '%s:%s' "${GITEE_USER}" "${GITEE_TOKEN}" | base64 | tr -d '\n')
-            echo "::add-mask::${basic_auth}"
             git -c http.https://gitee.com/.extraheader="AUTHORIZATION: Basic ${basic_auth}" \
               push "${repository_url}" "${TARGET_SHA}:refs/heads/master"
           fi
-          mirrored_sha=$(git ls-remote "${repository_url}" refs/heads/master | awk '{print $1}')
+          mirrored_sha=$(git -c http.https://gitee.com/.extraheader="AUTHORIZATION: Basic ${basic_auth}" \
+            ls-remote "${repository_url}" refs/heads/master | awk '{print $1}')
           if [ "${mirrored_sha}" != "${TARGET_SHA}" ]; then
             echo "Gitee mirror mismatch: expected ${TARGET_SHA}, got ${mirrored_sha:-missing}." >&2
             exit 1
