@@ -79,7 +79,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .preview-board { position: relative; min-height: 600px; border: var(--line); padding: 34px; overflow: hidden; background: rgba(255,255,255,.18); }
 .preview-board::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(135deg, transparent 62%, rgba(239, 202, 22, .28)); }
 .board-label { position: relative; z-index: 2; display: inline-block; padding: 7px 12px; background: var(--ink); color: white; font-weight: 900; }
-.preview-board > img { position: absolute; z-index: 1; left: 18px; bottom: 12px; width: 68%; height: 82%; object-fit: cover; object-position: center; mix-blend-mode: multiply; }
+.preview-board > img { position: absolute; z-index: 1; left: 18px; bottom: 12px; width: 68%; height: 82%; object-fit: contain; object-position: center bottom; mix-blend-mode: multiply; }
 .burst { position: absolute; z-index: 3; left: 26px; top: 118px; padding: 18px; background: var(--ink); color: white; font-weight: 900; transform: rotate(-8deg); clip-path: polygon(50% 0,61% 15%,78% 6%,82% 24%,100% 25%,89% 42%,100% 57%,82% 64%,78% 84%,60% 76%,49% 100%,39% 80%,20% 91%,18% 70%,0 66%,12% 49%,1% 32%,22% 28%,25% 8%,41% 17%); }
 .preview-scores { position: absolute; z-index: 2; top: 42px; right: 28px; width: 208px; display: grid; gap: 8px; }
 .preview-scores > div { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; padding: 12px 0; border-bottom: 2px solid var(--ink); }
@@ -121,7 +121,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .verdict-copy p { display: inline; background: var(--yellow); font-size: 23px; font-weight: 900; line-height: 1.7; box-shadow: 8px 0 0 var(--yellow), -8px 0 0 var(--yellow); }
 .result-analysis { position: relative; display: grid; grid-template-columns: minmax(190px, .82fr) 1.18fr; grid-template-rows: 390px auto; gap: 18px; border-right: var(--line); }
 .result-mascot { position: relative; min-width: 0; }
-.result-mascot img { width: 100%; height: 100%; object-fit: cover; mix-blend-mode: multiply; }
+.result-mascot img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; mix-blend-mode: multiply; }
 .result-mascot span { position: absolute; right: -15px; top: 20px; color: var(--coral); font-size: 13px; transform: rotate(-5deg); }
 .dimension-bars { display: grid; align-content: center; gap: 18px; }
 .dimension-bars > div { display: grid; grid-template-columns: 80px 1fr 30px; align-items: center; gap: 10px; font-size: 12px; font-weight: 750; }
@@ -141,7 +141,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .mini-scores b:last-child { color: var(--yellow); text-shadow: 1px 1px var(--ink); }
 .mini-scores small { display: block; color: var(--ink); text-shadow: none; font: 800 10px sans-serif; }
 .share-card-preview h3 { margin: 12px 0 0; padding: 6px; background: var(--yellow); font-size: 20px; }
-.share-card-preview img { width: 100%; height: 250px; object-fit: cover; mix-blend-mode: multiply; }
+.share-card-preview img { width: 100%; height: 250px; object-fit: contain; object-position: center bottom; mix-blend-mode: multiply; }
 .share-card-preview p { margin: auto 0 0; font-size: 12px; font-weight: 750; }
 .result-ctas { display: grid; grid-template-columns: 1fr 1fr .8fr; gap: 16px; margin-top: 18px; }
 .next-play { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: center; margin-top: 24px; padding: 14px 20px; border: var(--line); }
@@ -171,24 +171,34 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .panel-heading.static { cursor: default; }
 .reaction-panel { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
 .reaction-panel .panel-heading > span { color: var(--blue); }
-.reaction-game { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(360px, 1.2fr); grid-template-rows: 1fr auto; gap: 18px 24px; padding: 24px; border-top: var(--soft-line); }
-.reaction-copy { padding: 8px 8px 0; }
-.reaction-copy > strong { font-size: 25px; }
-.reaction-copy > strong b { color: var(--blue); font-size: 42px; }
-.reaction-thumbs { display: flex; gap: 7px; margin: 22px 0 42px; }
-.reaction-thumbs img { width: 50px; height: 50px; object-fit: cover; border: 1px solid transparent; filter: grayscale(.25); opacity: .65; }
-.reaction-thumbs img.active { border: 3px solid var(--blue); filter: none; opacity: 1; }
-.reaction-copy > span { color: var(--muted); }
-.reaction-copy h3 { margin: 14px 0 0; font-size: clamp(31px, 3vw, 44px); line-height: 1.08; }
-.reaction-scene { grid-column: 2; grid-row: 1 / 3; width: 100%; height: 380px; object-fit: cover; border-left: var(--soft-line); }
+.reaction-game { display: grid; grid-template-columns: minmax(320px, .88fr) minmax(380px, 1.12fr); grid-template-rows: 1fr auto; gap: 18px 28px; padding: 24px; border-top: var(--soft-line); }
+.reaction-copy { min-width: 0; padding: 8px 8px 0; }
+.reaction-copy > strong { display: block; margin-top: 14px; color: var(--muted); font-size: 13px; }
+.reaction-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.reaction-progress i { height: 7px; border: 1px solid var(--ink); background: transparent; }
+.reaction-progress i.active { background: var(--blue); border-color: var(--blue); }
+.reaction-copy h3 { margin: 12px 0 0; font-size: clamp(31px, 3vw, 44px); line-height: 1.08; }
+.reaction-flash { display: flex; align-items: center; gap: 10px; margin: 18px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; animation: reaction-pop 260ms ease both; }
+.reaction-flash b { flex: 0 0 auto; padding: 5px 8px; background: var(--yellow); color: var(--ink); }
+@keyframes reaction-pop { from { opacity: 0; transform: translateY(5px); } }
+.reaction-scene { grid-column: 2; grid-row: 1 / 3; width: 100%; min-height: 380px; display: grid; grid-template-rows: 1fr auto; place-items: center; margin: 0; overflow: hidden; border-left: var(--soft-line); background: var(--paper-2); }
+.reaction-scene img { display: block; width: 100%; height: 346px; object-fit: contain; }
+.reaction-scene figcaption { width: 100%; padding: 9px 12px; border-top: var(--soft-line); background: var(--paper); color: var(--muted); font-size: 11px; font-weight: 900; }
 .reaction-options { grid-column: 1; display: grid; grid-template-columns: 1fr; gap: 10px; }
-.reaction-option { min-height: 58px; display: flex; align-items: center; justify-content: space-between; border: var(--line); padding: 0 18px; background: transparent; font-size: 17px; font-weight: 900; cursor: pointer; }
+.reaction-option { min-height: 62px; display: flex; align-items: center; justify-content: space-between; border: var(--line); padding: 9px 16px; background: transparent; text-align: left; cursor: pointer; }
+.reaction-option > span { display: grid; gap: 2px; font-size: 16px; font-weight: 900; }
+.reaction-option small { color: var(--muted); font-size: 10px; font-weight: 700; }
 .reaction-option:hover { background: var(--yellow); }
 .reaction-result { display: grid; grid-template-columns: 380px 1fr; align-items: center; gap: 36px; padding: 30px; border-top: var(--soft-line); }
-.reaction-result img { width: 100%; height: 370px; object-fit: cover; mix-blend-mode: multiply; }
+.reaction-result-visual { min-height: 390px; display: grid; grid-template-rows: 1fr auto; place-items: center; overflow: hidden; background: var(--paper-2); }
+.reaction-result-visual img { width: 100%; height: 350px; object-fit: contain; }
+.reaction-result-visual > span { width: 100%; padding: 9px 12px; border-top: var(--soft-line); background: var(--paper); color: var(--muted); font-size: 11px; font-weight: 900; }
 .reaction-result span { color: var(--muted); }
 .reaction-result > div > strong { display: block; color: var(--yellow); text-shadow: 2px 2px var(--ink); font: 950 140px/.9 Arial, sans-serif; }
 .reaction-result h3 { font-size: 38px; margin: 14px 0 6px; }
+.reaction-result blockquote { max-width: 560px; margin: 18px 0; padding: 14px 16px; border-left: 5px solid var(--blue); background: rgba(11,86,240,.07); font-size: 17px; font-weight: 850; }
+.reaction-result blockquote small { display: block; margin-bottom: 4px; color: var(--blue); font-size: 10px; }
+.reaction-deck-count { display: block; margin-top: 9px; color: var(--muted); }
 .game-loading, .game-error { padding: 50px 30px; border-top: var(--soft-line); }
 .court-body, .translator-body { padding: 26px 30px 30px; border-top: var(--soft-line); }
 .court-inputs { display: grid; grid-template-columns: 1fr 60px 1fr; align-items: center; gap: 18px; }
@@ -220,7 +230,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .image-lab-output { min-height: 610px; display: grid; place-items: center; padding: 30px; background: var(--paper-2); }
 .image-empty { position: relative; width: 100%; height: 100%; min-height: 500px; overflow: hidden; border: var(--soft-line); }
 .image-empty::before { content: none; }
-.image-empty img { width: 100%; height: 100%; min-height: 500px; object-fit: cover; filter: grayscale(.7); opacity: .45; mix-blend-mode: multiply; }
+.image-empty img { width: 100%; height: 100%; min-height: 500px; object-fit: contain; filter: grayscale(.7); opacity: .45; mix-blend-mode: multiply; }
 .image-empty span { position: absolute; right: 24px; bottom: 24px; padding: 12px 15px; background: var(--yellow); font-size: 20px; font-weight: 900; line-height: 1.35; transform: rotate(-2deg); }
 .image-generating { width: 100%; min-height: 500px; display: grid; place-content: center; border: var(--line); padding: 40px; background: var(--yellow); text-align: center; }
 .image-generating strong { margin-top: 15px; font-size: clamp(42px, 5vw, 72px); line-height: 1; letter-spacing: -.06em; }
@@ -239,7 +249,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .hao-hero > div:first-child { padding: 48px; }
 .hao-hero h1 { margin: 0; font-size: clamp(66px, 7vw, 104px); line-height: .92; letter-spacing: -.08em; }
 .hao-hero p { max-width: 520px; margin: 22px 0 28px; color: var(--on-dark-muted); font-size: 17px; line-height: 1.6; }
-.hao-hero > img { width: 100%; height: 100%; min-height: 430px; object-fit: cover; object-position: center 22%; border-left: 1px solid var(--on-dark-line); }
+.jiahao-portrait { display: block; aspect-ratio: 1; overflow: hidden; background-color: #03070d; background-image: var(--jiahao-sheet); background-repeat: no-repeat; background-position: var(--jiahao-position) center; background-size: 300% 100%; }
+.hao-hero-portrait { width: min(100%, 430px); height: auto; align-self: center; justify-self: center; border-left: 1px solid var(--on-dark-line); }
 .hao-panel { margin-bottom: 14px; border: var(--line); background: rgba(255,255,255,.14); }
 .hao-panel-heading { width: 100%; min-height: 96px; display: grid; grid-template-columns: 1fr 44px; align-items: center; gap: 18px; border: 0; padding: 0 26px; background: transparent; text-align: left; cursor: pointer; }
 .hao-panel-heading.static { cursor: default; }
@@ -340,8 +351,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .persona-gallery article { min-height: 320px; position: relative; padding: 25px; border-right: var(--line); border-bottom: var(--line); overflow: hidden; }
 .persona-gallery article:nth-child(3n) { border-right: 0; }
 .persona-gallery article > span { color: var(--blue); font-weight: 900; }
-.persona-gallery img { width: 100%; height: 180px; object-fit: cover; mix-blend-mode: multiply; }
-.type-glyph { height: 165px; display: grid; place-items: center; color: var(--blue); font: 950 118px/.8 serif; opacity: .75; }
+.persona-gallery img, .persona-gallery .jiahao-portrait { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; background-color: var(--paper-2); }
 .persona-gallery h2 { margin: 12px 0 5px; font-size: 27px; }
 .persona-gallery p { margin: 0; color: var(--muted); }
 .history-section { margin-top: 34px; border-top: 2px solid var(--ink); padding-top: 24px; }
@@ -446,21 +456,24 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .lab-title h1 { font-size: clamp(31px, 9.8vw, 42px); letter-spacing: -.06em; }
   .lab-title p { display: none; }
   .lab-title .persistent-score { border: 0; border-left: 1px solid rgba(255,255,255,.45); }
+  .lab-page > .lab-title { display: none; }
   .panel-heading { min-height: 82px; grid-template-columns: 1fr 28px; gap: 8px; padding: 0 14px; }
   .panel-heading > strong { font-size: 25px; }
   .panel-heading > small { grid-column: 1; grid-row: 2; align-self: start; margin-top: -20px; font-size: 11px; }
   .panel-heading > .icon { grid-column: 2; grid-row: 1 / 3; }
-  .reaction-game { display: flex; flex-direction: column; padding: 16px; }
-  .reaction-copy { padding: 6px; }
-  .reaction-copy > strong { font-size: 20px; }
-  .reaction-thumbs { margin: 12px 0 22px; }
-  .reaction-thumbs img { width: 42px; height: 42px; }
-  .reaction-copy h3 { font-size: 37px; }
-  .reaction-options { order: 2; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .reaction-scene { order: 3; height: 300px; border: 0; }
-  .reaction-option { min-height: 74px; padding: 0 14px; font-size: 17px; }
+  .reaction-game { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+  .reaction-copy { padding: 4px; }
+  .reaction-copy > strong { margin-top: 10px; font-size: 11px; }
+  .reaction-copy h3 { margin-top: 9px; font-size: 31px; }
+  .reaction-flash { margin-top: 12px; align-items: flex-start; }
+  .reaction-scene { order: 2; min-height: 250px; border: 0; }
+  .reaction-scene img { height: 220px; }
+  .reaction-options { order: 3; grid-template-columns: 1fr; gap: 8px; }
+  .reaction-option { min-height: 58px; padding: 8px 12px; }
+  .reaction-option > span { font-size: 15px; }
   .reaction-result { grid-template-columns: 1fr; padding: 16px; }
-  .reaction-result img { height: 330px; }
+  .reaction-result-visual { min-height: 330px; }
+  .reaction-result img { height: 300px; }
   .reaction-result > div > strong { font-size: 110px; }
   .court-body, .translator-body { padding: 16px; }
   .court-inputs { grid-template-columns: 1fr; }
@@ -485,7 +498,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .hao-hero > div:first-child { display: grid; align-content: center; padding: 26px 18px; }
   .hao-hero h1 { font-size: 52px; }
   .hao-hero p { font-size: 14px; }
-  .hao-hero > img { min-height: 390px; object-position: 52% center; }
+  .hao-hero-portrait { width: 100%; min-height: 0; border-left: 1px solid var(--on-dark-line); }
   .hao-panel-heading { min-height: 84px; grid-template-columns: 1fr 28px; gap: 8px; padding: 0 14px; }
   .hao-panel-heading strong { font-size: 24px; }
   .hao-panel-heading small { font-size: 11px; }

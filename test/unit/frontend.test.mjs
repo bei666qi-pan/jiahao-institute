@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 // Import from validation.js
 import { decideFallbackWinner, isAcceptedFile, MAX_FILE_BYTES, MAX_FILES, validateFiles } from '../../src/validation.js';
+
+const archiveSource = readFileSync(new URL('../../src/features/archive/ArchivePage.jsx', import.meta.url), 'utf8');
+const haoSource = readFileSync(new URL('../../src/features/hao/HaoPage.jsx', import.meta.url), 'utf8');
+const labSource = readFileSync(new URL('../../src/features/lab/LabPage.jsx', import.meta.url), 'utf8');
 
 // ---- Re-implement pure functions for testing (mirroring App.jsx logic) ----
 
@@ -160,6 +165,18 @@ function makeFallbackQuote(input, mode, level, style, variation = 0) {
 }
 
 // ---- Begin Tests ----
+
+test('豪气页面和人格档案展示真实嘉豪人物素材而不是文字占位', () => {
+  assert.match(haoSource, /JiahaoPortrait/);
+  assert.match(archiveSource, /JiahaoPortrait/);
+  assert.doesNotMatch(archiveSource, /type-glyph/);
+});
+
+test('反应局支持三选一即时反馈和下一套题', () => {
+  assert.match(labSource, /lastReaction/);
+  assert.match(labSource, /下一套/);
+  assert.match(labSource, /reaction-progress/);
+});
 
 // === hashString tests ===
 test('hashString is deterministic', () => {

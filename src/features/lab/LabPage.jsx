@@ -9,26 +9,36 @@ const ASSETS = {
   umbrella: '/assets/nailoong/umbrella.webp',
   arms: '/assets/nailoong/arms.webp',
   cat: '/assets/nailoong/cat.webp',
+  snack: '/assets/nailoong/snack.webp',
+  ktv: '/assets/nailoong/ktv.webp',
+  'video-call': '/assets/nailoong/video-call.webp',
+  elevator: '/assets/nailoong/elevator.webp',
 };
 
 function ReactionGame({ onReactionComplete }) {
+  const [run, setRun] = useState(0);
   const [challenge, setChallenge] = useState(null);
   const [answers, setAnswers] = useState([]);
   const [result, setResult] = useState(null);
+  const [lastReaction, setLastReaction] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
-    apiRequest(`/api/reactions/daily?date=${todayInShanghai()}`)
+    setChallenge(null);
+    setError('');
+    apiRequest(`/api/reactions/daily?date=${todayInShanghai()}&run=${run}`)
       .then((payload) => active && setChallenge(payload))
       .catch((nextError) => active && setError(nextError.message));
     return () => { active = false; };
-  }, []);
+  }, [run]);
 
   const choose = async (questionId, optionId) => {
     if (!challenge || busy) return;
     if (!answers.length) trackProductEvent('lab_game_started', { game: 'reaction' });
+    const selected = challenge.questions[answers.length]?.options.find((option) => option.id === optionId);
+    setLastReaction(selected ? { tone: selected.tone, text: selected.reaction } : null);
     const next = [...answers, { questionId, optionId }];
     setAnswers(next);
     if (next.length < challenge.questions.length) return;
@@ -44,14 +54,14 @@ function ReactionGame({ onReactionComplete }) {
 
   if (error) return <div className="game-error" role="alert"><strong>题目走丢了</strong><p>刷新一下，再来一局。</p></div>;
   if (!challenge) return <div className="game-loading">正在翻找今天的抽象题目…</div>;
-  if (result) return <div className="reaction-result"><img src="/assets/nailoong/arms.webp" alt="抱臂的抽象奶蛙"/><div><span>本局奶龙指数</span><strong>{result.nailoong.score}</strong><h3>{result.nailoong.archetype}</h3><p>{result.nailoong.verdict}</p><button type="button" className="outline-button" onClick={() => { setAnswers([]); setResult(null); }}>再来一局 <Icon name="reset"/></button></div></div>;
+  if (result) return <div className="reaction-result"><div className="reaction-result-visual"><img src={ASSETS[result.highlight?.asset] || ASSETS.arms} alt="本局最抽象反应的奶蛙现场"/><span>{result.highlight?.tone}</span></div><div><span>本局奶龙指数</span><strong>{result.nailoong.score}</strong><h3>{result.nailoong.archetype}</h3><p>{result.nailoong.verdict}</p>{result.highlight ? <blockquote><small>本局高光</small>{result.highlight.reaction}</blockquote> : null}<button type="button" className="outline-button" onClick={() => { setAnswers([]); setResult(null); setLastReaction(null); setRun((value) => (value + 1) % 3); }}>下一套题 <Icon name="reset"/></button><small className="reaction-deck-count">今天还有不同剧情，三套题轮着玩。</small></div></div>;
   if (busy || answers.length >= challenge.questions.length) return <div className="game-loading" aria-live="polite">正在汇总你的抽象反应…</div>;
 
   const question = challenge.questions[answers.length];
   return <div className="reaction-game">
-    <div className="reaction-copy"><strong><b>{answers.length + 1}</b> / {challenge.questions.length}</strong><h3>{question.prompt}</h3></div>
-    <img className="reaction-scene" src={ASSETS[question.asset]} alt="抽象奶蛙情境图"/>
-    <div className="reaction-options">{question.options.map((option) => <button type="button" className="reaction-option" key={option.id} onClick={() => choose(question.id, option.id)}>{option.label}<Icon name="arrow" size={18}/></button>)}</div>
+    <div className="reaction-copy"><div className="reaction-progress" aria-label={`第 ${answers.length + 1} 题，共 ${challenge.questions.length} 题`}>{challenge.questions.map((item, index) => <i key={item.id} className={index <= answers.length ? 'active' : ''}/>)}</div><strong>第 {run + 1} 套 · {answers.length + 1} / {challenge.questions.length}</strong><h3>{question.prompt}</h3>{lastReaction ? <p className="reaction-flash" role="status"><b>{lastReaction.tone}</b>{lastReaction.text}</p> : null}</div>
+    <figure className="reaction-scene"><img src={ASSETS[question.asset]} alt={`${question.prompt}的奶蛙情境图`}/><figcaption>轮到你接招</figcaption></figure>
+    <div className="reaction-options">{question.options.map((option) => <button type="button" className="reaction-option" key={option.id} onClick={() => choose(question.id, option.id)}><span>{option.label}<small>{option.tone}</small></span><Icon name="arrow" size={18}/></button>)}</div>
   </div>;
 }
 
@@ -155,7 +165,7 @@ function AbstractImageGame() {
         <fieldset className="image-choice-group"><legend>画面比例</legend><div>{IMAGE_RATIOS.map((item) => <button type="button" key={item.id} aria-pressed={aspectRatio === item.id} onClick={() => setAspectRatio(item.id)}>{item.label}</button>)}</div></fieldset>
         {error ? <div className="form-message error" role="alert">{error}</div> : null}
         <button type="button" className="yellow-button image-generate-button" disabled={busy || prompt.trim().length < 2} onClick={generate}>{busy ? '奶蛙正在赶来…' : '生成抽象现场'} <Icon name="image"/></button>
-        <p className="privacy-line"><Icon name="lock" size={15}/> 描述和图片不会保存。</p>
+        <p className="privacy-line"><Icon name="lock" size={15}/> 这是生成图，别当真；描述和图片不会保存。</p>
       </div>
       <div className="image-lab-output" aria-live="polite">
         {busy ? <div className="image-generating"><strong>奶蛙赶来中…</strong><p>这张图要现搓，稍等一下。</p></div> : imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
