@@ -41,6 +41,7 @@ test('旧请求默认生成奶龙图片并返回公开媒体身份', async () =>
   assert.doesNotMatch(calls[0].body.prompt, /嘉豪人物/);
   assert.deepEqual(calls[0].body.image, [config.references.nailoong]);
   assert.equal(calls[0].body.response_format, 'url');
+  assert.equal(calls[0].body.output_format, 'jpeg');
 });
 
 test('嘉豪请求使用独立提示词和嘉豪参考图', async () => {

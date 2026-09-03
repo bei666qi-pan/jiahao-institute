@@ -137,7 +137,7 @@ export async function generateAbstractImage(payload, config, fetchImpl = fetch) 
     model: volcengine.model,
     prompt: buildAbstractImagePrompt(request.prompt, request.scene, request.character),
     size: SIZE_BY_RATIO[request.aspectRatio], response_format: 'url', watermark: true,
-    sequential_image_generation: 'disabled', image: referenceImages,
+    output_format: 'jpeg', sequential_image_generation: 'disabled', image: referenceImages,
   };
   let data;
   try {

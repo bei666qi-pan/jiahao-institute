@@ -111,7 +111,7 @@ jobs:
           echo "image HTTP ${image_code}: ${image_summary}"
           test "${image_code}" = '200'
           jq -e '.provider == "volcengine"
-            and .model == "doubao-seedream-5-0-lite-260128"
+            and .model == "doubao-seedream-5.0-lite"
             and .character == "nailoong"
             and .mediaType == "image"
             and (.quality.status == "verified" or .quality.status == "unavailable")

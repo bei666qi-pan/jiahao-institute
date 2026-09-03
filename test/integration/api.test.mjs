@@ -7,6 +7,8 @@ const originalEnv = { ...process.env };
 function setupTestEnv() {
   process.env.DEEPSEEK_API_KEY = "";
   process.env.ARK_API_KEY = "";
+  process.env.MINIMAX_API_KEY = "";
+  process.env.MINIMAX_VIDEO_API_KEY = "";
   delete process.env.DATABASE_URL;
   delete process.env.ADMIN_PASSWORD;
   process.env.PORT = '0';
@@ -62,14 +64,14 @@ test('GET /healthz returns ok status', async () => {
   assert.deepEqual(body.imageGeneration, {
     configured: false,
     provider: 'volcengine',
-    model: 'doubao-seedream-5-0-lite-260128',
+    model: 'doubao-seedream-5.0-lite',
     characters: { nailoong: true, jiahao: true },
   });
   assert.deepEqual(body.videoGeneration, {
     configured: false,
     databaseConfigured: false,
-    provider: 'volcengine',
-    model: 'doubao-seedance-2-0-fast-260128',
+    provider: 'minimax',
+    model: 'MiniMax-Hailuo-2.3',
     dailyLimit: 1,
   });
 });
