@@ -200,4 +200,5 @@ test('供应商状态已取回时数据库回写失败不阻断用户看到真�
   assert.equal(task.status, 'succeeded');
   assert.equal(task.videoUrl, 'https://video.test/real.mp4');
   assert.equal(task.quota.remaining, 0);
+  assert.equal(task.quota.activeTaskId, null);
 });
