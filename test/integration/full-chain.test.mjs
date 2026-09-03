@@ -19,7 +19,11 @@ function setupEnv(mockUrl) {
   process.env.DEEPSEEK_CACHED_INPUT_CNY_PER_MILLION = '0.5';
   // Also configure vision provider to text since we test text flows
   process.env.ARK_BASE_URL = `${mockUrl}/`;
-  process.env.ARK_API_KEY = 'mock-key-67890';
+  // Production keeps the working multimodal credential in ARK_IMAGE_API_KEY.
+  // Photo/chat analysis must share that credential instead of requiring a
+  // second, independently configured ARK_API_KEY.
+  process.env.ARK_API_KEY = '';
+  process.env.ARK_IMAGE_API_KEY = 'mock-key-67890';
   process.env.ARK_MODEL = 'mock-vision-model';
   process.env.ARK_INPUT_CNY_PER_MILLION = '2';
   process.env.ARK_OUTPUT_CNY_PER_MILLION = '8';
@@ -109,6 +113,21 @@ test('POST /api/analyze returns complete normalized result', async () => {
 
   // Source should indicate cloud model was used
   assert.ok(body.source.includes('云端'));
+});
+
+test('POST /api/analyze accepts photo input when the shared Ark image key is configured', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/analyze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      input: '请鉴定这张图片',
+      mode: 'photo',
+      images: ['data:image/png;base64,iVBORw0KGgo='],
+    }),
+  });
+
+  assert.equal(status, 200);
+  assert.equal(body.type, '深情破碎豪');
+  assert.equal(body.source, '云端多模态大模型 · 规则计分');
 });
 
 // === Full-chain: PK Analyze ===
