@@ -26,22 +26,17 @@ try {
   }
   if (!loaded) throw lastNavigationError || new Error('生产页面无法加载');
 
-  const labNav = page.getByRole('button', { name: '抽象实验室', exact: true });
-  await labNav.waitFor({ state: 'visible', timeout: 15_000 });
-  await labNav.click();
-  await page.getByRole('button', { name: /嘴硬翻译器/ }).click();
-
-  const input = page.getByLabel('嘴硬翻译原句');
+  const input = page.getByLabel('要豪化的原句');
   await input.waitFor({ state: 'visible', timeout: 10_000 });
   await input.fill(INPUT);
 
-  const output = page.locator('.translator-body blockquote');
+  const output = page.locator('.hao-quote-output blockquote');
   const [response] = await Promise.all([
     page.waitForResponse(
       (candidate) => candidate.url().endsWith('/api/quote') && candidate.request().method() === 'POST',
       { timeout: 70_000 },
     ),
-    page.getByRole('button', { name: '开始嘴硬' }).click(),
+    page.getByRole('button', { name: /生成嘉豪语录/ }).click(),
   ]);
 
   const body = await response.json();
@@ -55,7 +50,7 @@ try {
   await output.waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForFunction(
     ({ selector, expected }) => document.querySelector(selector)?.textContent?.trim() === expected,
-    { selector: '.translator-body blockquote', expected: generated },
+    { selector: '.hao-quote-output blockquote', expected: generated },
     { timeout: 10_000 },
   );
 
