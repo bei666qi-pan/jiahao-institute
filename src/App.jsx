@@ -106,6 +106,11 @@ export default function App() {
       openRoom(pendingRoom);
       return;
     }
+    if (sessionStorage.getItem('jiahao-pending-destination') === 'friends') {
+      sessionStorage.removeItem('jiahao-pending-destination');
+      navigate('friends');
+      return;
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
