@@ -201,7 +201,9 @@ export function createVideoGenerationService({ store, provider, enabled = true, 
           task = { ...task, ...latest };
         }
       }
-      return publicTask(task, await quota(visitorId));
+      const currentQuota = await quota(visitorId);
+      if (TERMINAL.has(task.status) && currentQuota.activeTaskId === task.id) currentQuota.activeTaskId = null;
+      return publicTask(task, currentQuota);
     },
   };
 }

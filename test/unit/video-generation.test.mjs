@@ -200,4 +200,22 @@ test('供应商状态已取回时数据库回写失败不阻断用户看到真�
   assert.equal(task.status, 'succeeded');
   assert.equal(task.videoUrl, 'https://video.test/real.mp4');
   assert.equal(task.quota.remaining, 0);
+  assert.equal(task.quota.activeTaskId, null);
+});
+
+test('查询旧日终态任务时保留今日正在生成的任务', async () => {
+  const store = memoryStore();
+  store.tasks.set('task-yesterday', {
+    id: 'task-yesterday', visitorId: 'visitor-1', quotaDate: '2026-09-02',
+    character: 'nailoong', aspectRatio: '1:1', status: 'succeeded', videoUrl: 'https://video.test/yesterday.mp4',
+  });
+  store.tasks.set('task-today', {
+    id: 'task-today', visitorId: 'visitor-1', quotaDate: '2026-09-03',
+    character: 'jiahao', aspectRatio: '1:1', status: 'running', providerTaskId: 'provider-today',
+  });
+  const service = createVideoGenerationService({ store, provider: {}, now: () => now });
+
+  const task = await service.status('task-yesterday', 'visitor-1');
+  assert.equal(task.status, 'succeeded');
+  assert.equal(task.quota.activeTaskId, 'task-today');
 });
