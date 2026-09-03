@@ -48,16 +48,29 @@ export function shanghaiQuotaWindow(date = new Date()) {
   return { date: value, resetAt: nextLocalMidnight.toISOString() };
 }
 
-function providerFailure(status, data = {}) {
-  const diagnostic = `${data?.error?.code || ''} ${data?.error?.message || ''}`;
-  if ((status === 400 || status === 422) && /sensitive|safety|content|prompt/i.test(diagnostic)) {
-    return new VideoGenerationError('视频描述或参考素材未通过校验，请换个友善的说法', { statusCode: 400, code: 'INVALID_CONTENT' });
+function minimaxFailure(status, data = {}) {
+  const providerCode = Number(data?.base_resp?.status_code || data?.error?.code || 0);
+  if (status === 429 || status === 402 || [1002, 1008, 1041, 2045, 2056].includes(providerCode)) {
+    return new VideoGenerationError('今日使用人数过多，暂不支持生成', {
+      statusCode: 503,
+      code: 'PROVIDER_CAPACITY_EXHAUSTED',
+    });
   }
-  const code = status === 429 ? 'RATE_LIMITED' : status === 401 || status === 403 ? 'AUTHENTICATION_FAILED' : status === 402 ? 'QUOTA_EXHAUSTED' : 'VIDEO_PROVIDER_FAILED';
-  return new VideoGenerationError('火山引擎视频服务暂时不可用', { statusCode: status === 429 ? 503 : 503, code });
+  if ([1026, 1027].includes(providerCode)) {
+    return new VideoGenerationError('视频描述或参考素材未通过校验，请换个友善的说法', {
+      statusCode: 400,
+      code: 'INVALID_CONTENT',
+    });
+  }
+  if (status === 401 || status === 403 || [1004, 2049].includes(providerCode)) {
+    return new VideoGenerationError('视频生成服务暂时不可用', { code: 'AUTHENTICATION_FAILED' });
+  }
+  return new VideoGenerationError('视频生成服务暂时不可用', {
+    code: providerCode === 1001 ? 'TIMEOUT' : 'VIDEO_PROVIDER_FAILED',
+  });
 }
 
-async function providerRequest(url, key, init, fetchImpl) {
+async function minimaxRequest(url, key, init, fetchImpl) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
@@ -67,45 +80,66 @@ async function providerRequest(url, key, init, fetchImpl) {
       signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw providerFailure(response.status, data);
+    if (!response.ok || Number(data?.base_resp?.status_code || 0) !== 0) throw minimaxFailure(response.status, data);
     return data;
   } catch (error) {
     if (error instanceof VideoGenerationError) throw error;
-    throw new VideoGenerationError('火山引擎视频服务暂时不可用', { code: error?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR' });
-  } finally { clearTimeout(timeout); }
+    throw new VideoGenerationError('视频生成服务暂时不可用', {
+      code: error?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR',
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-export function createArkVideoProvider(config, fetchImpl = fetch) {
+export function createMinimaxVideoProvider(config, fetchImpl = fetch) {
+  const withQuery = (base, name, value) => {
+    const url = new URL(base);
+    url.searchParams.set(name, value);
+    return url.toString();
+  };
   return {
-    async create(request, safetyIdentifier) {
-      if (!config?.key) throw new VideoGenerationError('火山引擎视频生成服务尚未配置', { code: 'NOT_CONFIGURED' });
-      const reference = config?.references?.[request.character];
-      if (!reference) throw new VideoGenerationError('角色视频参考图尚未配置', { code: 'REFERENCE_NOT_CONFIGURED' });
-      const data = await providerRequest(config.url, config.key, {
+    async create(request) {
+      if (!config?.key) throw new VideoGenerationError('视频生成服务尚未配置', { code: 'NOT_CONFIGURED' });
+      if (typeof config.createFirstFrame !== 'function') {
+        throw new VideoGenerationError('角色视频首帧服务尚未配置', { code: 'REFERENCE_NOT_CONFIGURED' });
+      }
+      const firstFrame = await config.createFirstFrame(request);
+      if (!firstFrame) throw new VideoGenerationError('角色视频首帧生成失败', { code: 'EMPTY_FIRST_FRAME' });
+      const data = await minimaxRequest(config.url, config.key, {
         method: 'POST',
         body: JSON.stringify({
           model: config.model,
-          content: [
-            { type: 'text', text: buildVideoPrompt(request.prompt, request.scene, request.character) },
-            { type: 'image_url', image_url: { url: reference }, role: 'reference_image' },
-          ],
-          safety_identifier: safetyIdentifier,
-          resolution: '720p', ratio: request.aspectRatio, duration: 5,
-          generate_audio: false, watermark: true,
+          prompt: buildVideoPrompt(request.prompt, request.scene, request.character),
+          first_frame_image: firstFrame,
+          duration: 6,
+          resolution: '768P',
+          prompt_optimizer: true,
+          aigc_watermark: true,
         }),
       }, fetchImpl);
-      if (!data?.id) throw new VideoGenerationError('视频服务没有返回任务编号', { code: 'EMPTY_TASK' });
-      return { id: String(data.id) };
+      if (!data?.task_id) throw new VideoGenerationError('视频服务没有返回任务编号', { code: 'EMPTY_TASK' });
+      return { id: String(data.task_id) };
     },
     async get(providerTaskId) {
-      const data = await providerRequest(`${config.url}/${encodeURIComponent(providerTaskId)}`, config.key, { method: 'GET' }, fetchImpl);
+      const data = await minimaxRequest(withQuery(config.queryUrl, 'task_id', providerTaskId), config.key, { method: 'GET' }, fetchImpl);
       const raw = String(data?.status || '').toLowerCase();
-      const status = ['queued', 'running', 'succeeded', 'failed', 'expired'].includes(raw) ? raw : 'running';
-      return {
-        status,
-        videoUrl: status === 'succeeded' ? data?.content?.video_url || data?.content?.file_url || null : null,
-        errorCode: status === 'failed' || status === 'expired' ? String(data?.error?.code || status).slice(0, 64).toUpperCase() : null,
-      };
+      const status = raw === 'success' ? 'succeeded'
+        : raw === 'fail' ? 'failed'
+          : raw === 'processing' ? 'running'
+            : ['preparing', 'queueing'].includes(raw) ? 'queued' : 'running';
+      if (status !== 'succeeded') {
+        return {
+          status,
+          videoUrl: null,
+          errorCode: status === 'failed' ? String(data?.base_resp?.status_code || 'PROVIDER_FAILED').slice(0, 64).toUpperCase() : null,
+        };
+      }
+      if (!data?.file_id) throw new VideoGenerationError('视频服务没有返回成片编号', { code: 'EMPTY_FILE' });
+      const file = await minimaxRequest(withQuery(config.fileUrl, 'file_id', data.file_id), config.key, { method: 'GET' }, fetchImpl);
+      const videoUrl = file?.file?.download_url;
+      if (!videoUrl) throw new VideoGenerationError('视频服务没有返回可播放成片', { code: 'EMPTY_VIDEO' });
+      return { status, videoUrl, errorCode: null };
     },
   };
 }
@@ -119,8 +153,12 @@ function publicTask(task, quota) {
   };
 }
 
-export function createVideoGenerationService({ store, provider, now = () => new Date(), id = randomUUID, hashVisitor = (value) => createHash('sha256').update(value).digest('hex') }) {
+export function createVideoGenerationService({ store, provider, enabled = true, unavailableMessage = '当前套餐不支持视频生成', now = () => new Date(), id = randomUUID, hashVisitor = (value) => createHash('sha256').update(value).digest('hex') }) {
+  const assertAvailable = () => {
+    if (!enabled) throw new VideoGenerationError(unavailableMessage, { statusCode: 503, code: 'VIDEO_PLAN_UNAVAILABLE' });
+  };
   const quota = async (visitorId) => {
+    assertAvailable();
     const window = shanghaiQuotaWindow(now());
     const current = await store.quota(visitorId, window.date);
     return { limit: 1, used: current.used, remaining: Math.max(0, 1 - current.used), resetAt: window.resetAt, activeTaskId: current.activeTaskId || null };
@@ -128,6 +166,7 @@ export function createVideoGenerationService({ store, provider, now = () => new 
   return {
     quota,
     async create(visitorId, payload) {
+      assertAvailable();
       const request = normalizeVideoRequest(payload);
       const window = shanghaiQuotaWindow(now());
       const task = { id: id(), visitorId, quotaDate: window.date, character: request.character, aspectRatio: request.aspectRatio, status: 'submitting' };
@@ -141,7 +180,7 @@ export function createVideoGenerationService({ store, provider, now = () => new 
       } catch (error) {
         await store.release(task.id);
         if (error instanceof VideoGenerationError) throw error;
-        throw new VideoGenerationError('火山引擎视频服务暂时不可用', { code: 'VIDEO_PROVIDER_FAILED' });
+        throw new VideoGenerationError('视频服务暂时不可用', { code: 'VIDEO_PROVIDER_FAILED' });
       }
       try {
         await store.attachProviderTask(task.id, created.id);

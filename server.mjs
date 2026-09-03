@@ -11,7 +11,7 @@ import { PostgresFeedbackStore, normalizeFeedback } from './server/feedback.mjs'
 import {
   PostgresVideoGenerationStore,
   VideoGenerationError,
-  createArkVideoProvider,
+  createMinimaxVideoProvider,
   createVideoGenerationService,
 } from './server/video-generation.mjs';
 import { resolveTextProvider } from './server/text-provider.mjs';
@@ -32,11 +32,10 @@ const PORT = Number(process.env.PORT || 8080);
 const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
 const TEXT_PROVIDER = resolveTextProvider(process.env);
 const ARK_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
-const ARK_IMAGE_URL = process.env.ARK_IMAGE_URL || `${ARK_API_BASE}/images/generations`;
-const ARK_VIDEO_URL = process.env.ARK_VIDEO_URL || `${ARK_API_BASE}/contents/generations/tasks`;
-const VISION_API_BASE = (process.env.ARK_IMAGE_API_KEY ? ARK_IMAGE_URL.replace(/\/images\/generations$/, '') : ARK_API_BASE).replace(/\/$/, '');
+const ARK_IMAGE_URL = process.env.ARK_IMAGE_URL || 'https://ark.cn-beijing.volces.com/api/plan/v3/images/generations';
+const VISION_API_BASE = ARK_API_BASE;
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
-const VISION_API_KEY = process.env.ARK_IMAGE_API_KEY || process.env.ARK_API_KEY;
+const VISION_API_KEY = process.env.ARK_API_KEY || process.env.ARK_IMAGE_API_KEY;
 const IMAGE_CONFIG = {
   references: {
     nailoong: process.env.NAILOONG_REFERENCE_URL || process.env.IMAGE_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/nailoong/arms.webp',
@@ -48,29 +47,35 @@ const IMAGE_CONFIG = {
   volcengine: {
     key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
     url: ARK_IMAGE_URL,
-    model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-lite-260128',
+    model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
   },
   quality: {
     key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
-    url: `${ARK_IMAGE_URL.replace(/\/images\/generations$/, '')}/chat/completions`,
+    url: `${VISION_API_BASE}/chat/completions`,
     model: VISION_MODEL,
   },
 };
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
 const observability = new Observability();
+const MINIMAX_VIDEO_BASE = (process.env.MINIMAX_VIDEO_BASE_URL || 'https://api.minimaxi.com').replace(/\/$/, '');
 const VIDEO_CONFIG = {
-  key: process.env.ARK_IMAGE_API_KEY || process.env.ARK_API_KEY || '',
-  url: ARK_VIDEO_URL,
-  model: process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-fast-260128',
-  references: {
-    nailoong: IMAGE_CONFIG.references.nailoong,
-    jiahao: IMAGE_CONFIG.references.jiahao[0],
+  enabled: process.env.MINIMAX_VIDEO_ENABLED !== 'false',
+  key: process.env.MINIMAX_VIDEO_API_KEY || process.env.MINIMAX_API_KEY || '',
+  url: process.env.MINIMAX_VIDEO_URL || `${MINIMAX_VIDEO_BASE}/v1/video_generation`,
+  queryUrl: process.env.MINIMAX_VIDEO_QUERY_URL || `${MINIMAX_VIDEO_BASE}/v1/query/video_generation`,
+  fileUrl: process.env.MINIMAX_VIDEO_FILE_URL || `${MINIMAX_VIDEO_BASE}/v1/files/retrieve`,
+  model: process.env.MINIMAX_VIDEO_MODEL || 'MiniMax-Hailuo-2.3',
+  async createFirstFrame(request) {
+    const frame = await generateAbstractImage(request, IMAGE_CONFIG);
+    return frame.imageUrl || frame.imageDataUrl || '';
   },
 };
 const videoService = createVideoGenerationService({
   store: new PostgresVideoGenerationStore(observability.pool),
-  provider: createArkVideoProvider(VIDEO_CONFIG),
+  provider: createMinimaxVideoProvider(VIDEO_CONFIG),
+  enabled: VIDEO_CONFIG.enabled,
+  unavailableMessage: '今日使用人数过多，暂不支持生成',
 });
 const feedbackStore = new PostgresFeedbackStore(observability.pool);
 
@@ -370,7 +375,7 @@ async function handleVideoRequest(req, res, action) {
     const statusCode = result.statusCode || 200;
     sendJson(res, statusCode, result.body, visitor.cookies);
     void observability.recordApiRequest(req, {
-      requestId, endpoint: result.endpoint, mode: 'video_generation', provider: 'volcengine',
+      requestId, endpoint: result.endpoint, mode: 'video_generation', provider: 'minimax',
       model: VIDEO_CONFIG.model, statusCode, ok: true, latencyMs: performance.now() - started,
     });
   } catch (error) {
@@ -379,7 +384,7 @@ async function handleVideoRequest(req, res, action) {
     const code = known ? error.code : 'VIDEO_SERVICE_FAILED';
     const message = known ? cleanText(error.message, '视频生成暂时不可用', 100) : '视频生成暂时不可用';
     void observability.recordApiRequest(req, {
-      requestId, endpoint: '/api/videos', mode: 'video_generation', provider: 'volcengine',
+      requestId, endpoint: '/api/videos', mode: 'video_generation', provider: 'minimax',
       model: VIDEO_CONFIG.model, statusCode, ok: false, latencyMs: performance.now() - started,
       errorCode: code, errorMessage: message,
     });
@@ -434,11 +439,12 @@ export const server = createServer(async (req, res) => {
         },
       },
       videoGeneration: {
-        configured: Boolean(VIDEO_CONFIG.key),
+        configured: Boolean(VIDEO_CONFIG.key) && VIDEO_CONFIG.enabled,
         databaseConfigured: observability.enabled,
-        provider: 'volcengine',
+        provider: 'minimax',
         model: VIDEO_CONFIG.model,
         dailyLimit: 1,
+        ...(VIDEO_CONFIG.enabled ? {} : { unavailableReason: 'provider_unavailable' }),
       },
       feedback: { configured: observability.enabled },
       observability: observability.status(),
