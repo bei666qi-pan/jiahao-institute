@@ -26,7 +26,7 @@ const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
 const TEXT_PROVIDER = resolveTextProvider(process.env);
 const VISION_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
-const VISION_API_KEY = process.env.ARK_API_KEY;
+const VISION_API_KEY = process.env.ARK_IMAGE_API_KEY || process.env.ARK_API_KEY;
 const IMAGE_CONFIG = {
   referenceImageUrl: process.env.IMAGE_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/nailoong/arms.webp',
   minimax: {
