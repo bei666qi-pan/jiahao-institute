@@ -198,7 +198,7 @@ function CharacterStudio({ mediaTask, mediaJob, onNavigate, open, onToggle }) {
 }
 
 export function LabPage({ latestResult, onNavigate, onReactionComplete, mediaTask, mediaJob }) {
-  const [activeTool, setActiveTool] = useState(() => mediaJob.status !== 'idle' || window.location.hash === '#character-studio' ? 'studio' : '');
+  const [activeTool, setActiveTool] = useState('studio');
 
   useEffect(() => {
     if (mediaJob.status !== 'idle') setActiveTool('studio');
@@ -208,7 +208,8 @@ export function LabPage({ latestResult, onNavigate, onReactionComplete, mediaTas
 
   return <main className="lab-page">
     <header className="lab-title"><div><h1>奶龙实验室</h1><p>这里单独玩奶龙。五道题，看你的真实反应。</p></div>{latestResult?.nailoong ? <div className="persistent-score"><span>上次奶龙指数 <b>{latestResult.nailoong.score}</b></span></div> : null}</header>
+    <CharacterStudio mediaTask={mediaTask} mediaJob={mediaJob} onNavigate={onNavigate} open={activeTool === 'studio'} onToggle={() => toggleTool('studio')}/>
     <section className="lab-panel reaction-panel"><div className="panel-heading static"><strong>奶龙反应局</strong><small>五道题，看看你会怎么接</small><Icon name="flask"/></div><ReactionGame onReactionComplete={onReactionComplete}/></section>
-    <section className="lab-tool-rail" aria-label="更多奶龙玩法"><AbstractCourt open={activeTool === 'court'} onToggle={() => toggleTool('court')}/><section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section><CharacterStudio mediaTask={mediaTask} mediaJob={mediaJob} onNavigate={onNavigate} open={activeTool === 'studio'} onToggle={() => toggleTool('studio')}/></section>
+    <section className="lab-tool-rail" aria-label="更多奶龙玩法"><AbstractCourt open={activeTool === 'court'} onToggle={() => toggleTool('court')}/><section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section></section>
   </main>;
 }

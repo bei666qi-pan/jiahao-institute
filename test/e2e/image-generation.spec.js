@@ -6,7 +6,9 @@ async function openStudio(page) {
     ? page.getByRole('button', { name: '实验室', exact: true })
     : page.getByRole('button', { name: '抽象实验室', exact: true });
   await labButton.click();
-  await page.getByRole('button', { name: /角色创作室/ }).click();
+  if (!await page.getByRole('group', { name: '选择创作角色' }).isVisible()) {
+    await page.getByRole('button', { name: /角色创作室/ }).click();
+  }
   await expect(page.getByRole('group', { name: '选择创作角色' })).toBeVisible();
 }
 
@@ -23,6 +25,15 @@ test.beforeEach(async ({ page }) => {
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ limit: 1, used: 0, remaining: 1, resetAt: '2026-09-04T16:00:00.000Z', activeTaskId: null }),
   }));
+});
+
+test('角色创作室在实验室首位展开，奶龙反应局紧随其后', async ({ page }) => {
+  await openStudio(page);
+  const studio = page.locator('#character-studio');
+  const reaction = page.locator('.reaction-panel');
+  await expect(studio).toBeVisible();
+  await expect(reaction).toBeVisible();
+  expect(await studio.evaluate((node) => Boolean(node.compareDocumentPosition(document.querySelector('.reaction-panel')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
 });
 
 test('角色与媒介切换会同步更新文案和主操作', async ({ page }) => {
