@@ -5,7 +5,13 @@ export async function apiRequest(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || '服务暂时不可用，请稍后再试');
+  if (!response.ok) {
+    const error = new Error(payload.error || '服务暂时不可用，请稍后再试');
+    error.status = response.status;
+    error.code = payload.code;
+    error.activeTaskId = payload.activeTaskId;
+    throw error;
+  }
   return payload;
 }
 

@@ -39,3 +39,14 @@ test('零开始量不会产生无穷或虚假转化率', () => {
   assert.equal(result.games[0].completionRate, null);
   assert.equal(result.image.successRate, null);
 });
+
+test('观测台视频指标按角色展示成功率与延迟', () => {
+  const result = buildProductInsights([], [], null, [
+    { character: 'nailoong', requests: '3', successes: '2', p95_ms: '42000', average_latency_ms: '31000' },
+    { character: 'jiahao', requests: '2', successes: '2', p95_ms: '38000', average_latency_ms: '28000' },
+  ]);
+  assert.deepEqual(result.video, [
+    { character: 'nailoong', requests: 3, successes: 2, successRate: 2 / 3 * 100, p95Ms: 42000, averageLatencyMs: 31000 },
+    { character: 'jiahao', requests: 2, successes: 2, successRate: 100, p95Ms: 38000, averageLatencyMs: 28000 },
+  ]);
+});

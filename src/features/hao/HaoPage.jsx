@@ -136,6 +136,44 @@ function HaoPkArena({ open, onToggle }) {
   </section>;
 }
 
+function FeedbackEntry() {
+  const dialogRef = useRef(null);
+  const [category, setCategory] = useState('experience');
+  const [message, setMessage] = useState('');
+  const [contact, setContact] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await postJson('/api/feedback', { category, message, contact });
+      setNotice('已收到，谢谢你认真告诉我们。');
+      setMessage(''); setContact('');
+    } catch (nextError) {
+      setError(nextError.message || '反馈暂时没有送达，请稍后再试。');
+    } finally { setBusy(false); }
+  };
+
+  return <>
+    <button type="button" className="feedback-entry" onClick={() => { setNotice(''); setError(''); dialogRef.current?.showModal(); }}><span>意见反馈</span><small>把不爽的地方直接告诉我们</small><Icon name="arrow"/></button>
+    <dialog ref={dialogRef} className="feedback-dialog" aria-labelledby="feedback-title" onClick={(event) => { if (event.target === dialogRef.current) dialogRef.current.close(); }}>
+      <form onSubmit={submit}>
+        <button type="button" className="dialog-close" aria-label="关闭意见反馈" onClick={() => dialogRef.current?.close()}><Icon name="close"/></button>
+        <span className="feedback-kicker">SAY IT STRAIGHT</span><h2 id="feedback-title">告诉我们哪里还能更好</h2><p>产品体验、生成效果、Bug 或新想法，都可以直说。</p>
+        <label htmlFor="feedback-category">反馈类型</label><select id="feedback-category" value={category} onChange={(event) => setCategory(event.target.value)}><option value="experience">使用体验</option><option value="generation">生成效果</option><option value="bug">Bug 报告</option><option value="idea">功能想法</option><option value="other">其他</option></select>
+        <label htmlFor="feedback-message">反馈内容</label><textarea id="feedback-message" value={message} maxLength={1000} required minLength={2} onChange={(event) => setMessage(event.target.value)} placeholder="具体说说在哪一步、发生了什么…"/>
+        <label htmlFor="feedback-contact">联系方式 <small>可选</small></label><input id="feedback-contact" value={contact} maxLength={120} onChange={(event) => setContact(event.target.value)} placeholder="微信 / 邮箱，方便我们回访"/>
+        {error ? <p className="form-message error" role="alert">{error}</p> : null}{notice ? <p className="form-message success" role="status">{notice}</p> : null}
+        <button type="submit" className="primary-button" disabled={busy || message.trim().length < 2}>{busy ? '正在送达…' : '提交反馈'} <Icon name="arrow"/></button>
+        <small className="feedback-privacy">只保存你主动提交的反馈和联系方式，不会附带鉴定或生成内容。</small>
+      </form>
+    </dialog>
+  </>;
+}
+
 export function HaoPage({ onNavigate }) {
   const [pkOpen, setPkOpen] = useState(false);
   const quoteInputRef = useRef(null);
@@ -145,6 +183,7 @@ export function HaoPage({ onNavigate }) {
   };
 
   return <main className="hao-page">
+    <FeedbackEntry/>
     <header className="hao-hero"><div className="hao-hero-copy"><h1 aria-label="这里是豪气宇宙"><span>这里是</span><span>豪气宇宙</span></h1><p>测一测，改句话，和朋友比一局。好玩就行，不用当真。</p><div className="hero-actions"><button type="button" className="primary-button" onClick={() => onNavigate('assay')}>测测我有多豪 <Icon name="arrow"/></button><button type="button" className="outline-button" onClick={focusQuote}>把一句话豪化 <Icon name="text"/></button></div></div><figure className="hao-hero-media"><img src="/assets/jiahao/hao-universe-hero.webp" alt="巷子里笑得很开心的嘉豪" width="960" height="1200" fetchPriority="high"/><figcaption>豪气是一种生活态度。</figcaption></figure></header>
     <HaoQuoteStudio inputRef={quoteInputRef}/>
     <section className="hao-play-rail"><article><div><h2>和好友比一局</h2><p>双方各出一句话，看看谁更豪。</p></div><button type="button" className="outline-button" onClick={() => setPkOpen((value) => !value)} aria-expanded={pkOpen}>{pkOpen ? '收起 PK' : '双人豪气 PK'} <Icon name="arrow"/></button></article><article className="hao-archive-door"><JiahaoPortrait variant={2} label="经典嘉豪人物图鉴预览" className="hao-archive-preview"/><div><h2>嘉豪出没图鉴</h2><p>六种嘉豪状态，原来的经典人物都在。</p></div><button type="button" className="outline-button" onClick={() => onNavigate('archive')}>去看图鉴 <Icon name="arrow"/></button></article></section>

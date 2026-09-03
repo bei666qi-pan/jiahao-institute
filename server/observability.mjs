@@ -137,7 +137,7 @@ function ratio(numerator, denominator) {
   return bottom > 0 ? number(numerator) / bottom * 100 : null;
 }
 
-export function buildProductInsights(eventRows = [], gameRows = [], imageRow = null) {
+export function buildProductInsights(eventRows = [], gameRows = [], imageRow = null, videoRows = []) {
   const events = new Map(eventRows.map((row) => [row.event_name, {
     event: row.event_name,
     events: number(row.events),
@@ -171,6 +171,14 @@ export function buildProductInsights(eventRows = [], gameRows = [], imageRow = n
       p95Ms: number(image.p95_ms),
       averageLatencyMs: number(image.average_latency_ms),
     },
+    video: videoRows.map((row) => ({
+      character: row.character,
+      requests: number(row.requests),
+      successes: number(row.successes),
+      successRate: ratio(row.successes, row.requests),
+      p95Ms: number(row.p95_ms),
+      averageLatencyMs: number(row.average_latency_ms),
+    })),
   };
 }
 
@@ -239,6 +247,21 @@ export class Observability {
       } finally { client.release(); }
     }
     return true;
+  }
+
+  async ensureVisitor(req) {
+    if (!this.enabled) throw Object.assign(new Error('视频额度服务尚未配置'), {
+      statusCode: 503,
+      code: 'VIDEO_DATABASE_NOT_CONFIGURED',
+    });
+    const existing = parseCookies(req).jh_vid;
+    const visitorId = UUID_RE.test(existing || '') ? existing : randomUUID();
+    await this.query(`insert into jh_visitors (visitor_id) values ($1)
+      on conflict (visitor_id) do update set last_seen=now()`, [visitorId]);
+    return {
+      visitorId,
+      cookies: existing === visitorId ? [] : [cookie('jh_vid', visitorId, VISITOR_MAX_AGE_SECONDS, req)],
+    };
   }
 
   async recordSession(req, payload = {}) {
@@ -336,7 +359,7 @@ export class Observability {
       coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros,
       count(*) filter (where pricing_configured)::bigint priced_requests
       from jh_api_requests where occurred_at >= $1 and occurred_at < $2`;
-    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel, labGames, imagePerformance] = await Promise.all([
+    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel, labGames, imagePerformance, videoPerformance, feedback] = await Promise.all([
       this.query(trafficSql, [range.start, range.end]),
       this.query(trafficSql, [range.previousStart, range.start]),
       this.query(apiSql, [range.start, range.end]),
@@ -375,6 +398,17 @@ export class Observability {
         coalesce(avg(latency_ms),0)::numeric average_latency_ms
         from jh_api_requests where occurred_at >= $1 and occurred_at < $2
           and endpoint = '/api/images/generate'`, [range.start, range.end]),
+      this.query(`select character, count(*)::bigint requests,
+        count(*) filter (where status = 'succeeded')::bigint successes,
+        coalesce(percentile_cont(.95) within group (order by extract(epoch from (completed_at-created_at))*1000)
+          filter (where completed_at is not null),0)::numeric p95_ms,
+        coalesce(avg(extract(epoch from (completed_at-created_at))*1000)
+          filter (where completed_at is not null),0)::numeric average_latency_ms
+        from jh_video_generations where created_at >= $1 and created_at < $2
+        group by character order by character`, [range.start, range.end]),
+      this.query(`select feedback_id, category, message, contact, created_at
+        from jh_feedback where created_at >= $1 and created_at < $2
+        order by created_at desc limit 20`, [range.start, range.end]),
     ]);
     const t = currentTraffic.rows[0]; const pt = previousTraffic.rows[0];
     const a = currentApi.rows[0]; const pa = previousApi.rows[0];
@@ -404,7 +438,8 @@ export class Observability {
       endpoints: endpoints.rows.map((row) => ({ endpoint: row.endpoint, requests: number(row.requests), successRate: number(row.successes) / Math.max(1, number(row.requests)) * 100, p95Ms: number(row.p95_ms), estimatedCostMicros: number(row.estimated_cost_micros) })),
       recentErrors: errors.rows,
       productFunnel: productFunnel.rows.map((row) => ({ event: row.event_name, events: number(row.events), visitors: number(row.visitors) })),
-      productInsights: buildProductInsights(productFunnel.rows, labGames.rows, imagePerformance.rows[0]),
+      productInsights: buildProductInsights(productFunnel.rows, labGames.rows, imagePerformance.rows[0], videoPerformance.rows),
+      feedback: feedback.rows,
     };
   }
 

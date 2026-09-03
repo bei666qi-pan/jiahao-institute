@@ -59,7 +59,19 @@ test('GET /healthz returns ok status', async () => {
   assert.equal(body.status, 'ok');
   assert.equal(body.textModelConfigured, false);
   assert.equal(body.visionModelConfigured, false);
-  assert.deepEqual(body.imageGeneration, { minimaxConfigured: false, volcengineConfigured: false, priority: ['volcengine', 'minimax'] });
+  assert.deepEqual(body.imageGeneration, {
+    configured: false,
+    provider: 'volcengine',
+    model: 'doubao-seedream-5-0-lite-260128',
+    characters: { nailoong: true, jiahao: true },
+  });
+  assert.deepEqual(body.videoGeneration, {
+    configured: false,
+    databaseConfigured: false,
+    provider: 'volcengine',
+    model: 'doubao-seedance-2-0-fast-260128',
+    dailyLimit: 1,
+  });
 });
 
 // === Static File Serving ===
@@ -112,13 +124,36 @@ test('POST /api/quote returns 503 without model key', async () => {
   assert.ok(body.error);
 });
 
-test('POST /api/images/generate returns 503 when both image providers are unconfigured', async () => {
+test('POST /api/images/generate returns 503 when Volcengine media is unconfigured', async () => {
   const { status, body } = await fetchJson(`${serverUrl}/api/images/generate`, {
     method: 'POST',
     body: JSON.stringify({ prompt: '雨夜撑伞等公交', aspectRatio: '1:1' }),
   });
   assert.equal(status, 503);
-  assert.equal(body.error, '图片生成服务尚未配置');
+  assert.equal(body.error, '火山引擎图片生成服务尚未配置');
+});
+
+test('GET /api/videos/quota requires the quota database', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/videos/quota`);
+  assert.equal(status, 503);
+  assert.equal(body.code, 'VIDEO_DATABASE_NOT_CONFIGURED');
+});
+
+test('POST /api/videos/tasks requires the quota database before provider submission', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/videos/tasks`, {
+    method: 'POST',
+    body: JSON.stringify({ character: 'jiahao', prompt: '蓝色片场回头', aspectRatio: '16:9' }),
+  });
+  assert.equal(status, 503);
+  assert.equal(body.code, 'VIDEO_DATABASE_NOT_CONFIGURED');
+});
+
+test('POST /api/feedback requires durable storage', async () => {
+  const { status, body } = await fetchJson(`${serverUrl}/api/feedback`, {
+    method: 'POST', body: JSON.stringify({ category: 'experience', message: '创作室很好用' }),
+  });
+  assert.equal(status, 503);
+  assert.equal(body.code, 'FEEDBACK_DATABASE_NOT_CONFIGURED');
 });
 
 test('GET /api/reactions/daily returns five public questions without model configuration', async () => {
