@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Icon } from './components/Icon';
-import { postJson } from './app/api';
-import { IMAGE_GENERATION_REQUEST_TIMEOUT_MS, createImageGenerationTask } from './app/imageGenerationTask';
+import { apiRequest, postJson } from './app/api';
+import { createMediaGenerationTask } from './app/mediaGenerationTask';
 import { useAssessmentHistory } from './app/useAssessmentHistory';
 import { AssayPage } from './features/assay/AssayPage';
 import { ResultPage } from './features/result/ResultPage';
@@ -31,15 +31,18 @@ function MobileNav({ page, onNavigate }) {
   return <nav className="mobile-nav" aria-label="移动端主导航">{NAV_ITEMS.map((item) => <button type="button" key={item.id} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.mobileLabel || item.label}</span></button>)}<button type="button" className={page === 'archive' ? 'active' : ''} aria-current={page === 'archive' ? 'page' : undefined} onClick={() => onNavigate('archive')}><Icon name="archive"/><span>我的</span></button></nav>;
 }
 
-function ImageGenerationDock({ job, onOpen, onDismiss }) {
+function MediaGenerationDock({ job, onOpen, onDismiss }) {
   if (job.status === 'idle') return null;
-  const running = job.status === 'running';
-  const complete = job.status === 'complete';
+  const running = ['submitting', 'queued', 'running', 'finalizing'].includes(job.status);
+  const complete = job.status === 'succeeded';
+  const role = job.character === 'jiahao' ? '嘉豪' : '奶龙';
+  const medium = job.mediaType === 'video' ? '视频' : '图片';
+  const phase = job.status === 'submitting' ? '正在提交' : job.status === 'queued' ? '已进入队列' : job.status === 'finalizing' ? '正在收尾' : '正在生成';
   return <aside className={`image-job-dock ${job.status}`} aria-live="polite">
-    <span className="image-job-mark"><Icon name={running ? 'spark' : complete ? 'image' : 'close'} size={20}/></span>
-    <div><strong>{running ? '奶蛙正在画' : complete ? '抽象现场已送达' : '这张图没画出来'}</strong><small>{running ? '放心去玩别的，画好会叫你。' : complete ? '随时回来查看或下载。' : '回到生图局，换个说法再试。'}</small></div>
-    <button type="button" onClick={onOpen}>{running ? '查看进度' : complete ? '看图' : '去重试'}</button>
-    {!running ? <button type="button" className="image-job-dismiss" aria-label="关闭图片生成提醒" onClick={onDismiss}><Icon name="close" size={17}/></button> : null}
+    <span className="image-job-mark"><Icon name={running ? 'spark' : complete ? (job.mediaType === 'video' ? 'play' : 'image') : 'close'} size={20}/></span>
+    <div><strong>{running ? `${role}${medium}${phase}` : complete ? `${role}${medium}已送达` : job.status === 'exhausted' ? '今日视频额度已用' : `${role}${medium}未生成`}</strong><small>{running ? '可以继续浏览，完成后会提醒你。' : complete ? '随时回来播放或下载。' : '回到角色创作室查看详情。'}</small></div>
+    <button type="button" onClick={onOpen}>{running ? '查看阶段' : complete ? '查看作品' : '回创作室'}</button>
+    {!running ? <button type="button" className="image-job-dismiss" aria-label="关闭创作任务提醒" onClick={onDismiss}><Icon name="close" size={17}/></button> : null}
     {running ? <i aria-hidden="true"><b/></i> : null}
   </aside>;
 }
@@ -49,10 +52,19 @@ export default function App() {
   const [roomCode, setRoomCode] = useState(initialRoomCode);
   const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'hao');
   const [result, setResult] = useState(null);
-  const imageTask = useMemo(() => createImageGenerationTask((input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(IMAGE_GENERATION_REQUEST_TIMEOUT_MS) })), []);
-  const imageJob = useSyncExternalStore(imageTask.subscribe, imageTask.getSnapshot, imageTask.getSnapshot);
+  const mediaTask = useMemo(() => createMediaGenerationTask({
+    generateImage: (input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(240_000) }),
+    createVideo: (input) => postJson('/api/videos/tasks', input),
+    getVideoTask: (id) => apiRequest(`/api/videos/tasks/${encodeURIComponent(id)}`),
+  }), []);
+  const mediaJob = useSyncExternalStore(mediaTask.subscribe, mediaTask.getSnapshot, mediaTask.getSnapshot);
   const { history, add, clear } = useAssessmentHistory();
   const latestResult = useMemo(() => result || history.find((item) => item && item.kind !== 'pk') || null, [result, history]);
+
+  useEffect(() => {
+    void mediaTask.restore();
+    return () => mediaTask.destroy();
+  }, [mediaTask]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -65,17 +77,17 @@ export default function App() {
   }, []);
 
   const navigate = (nextPage, target = '') => {
-    const nextUrl = target === 'image' ? '/#nailoong-image-studio' : '/';
+    const nextUrl = target === 'studio' ? '/#character-studio' : '/';
     if (`${window.location.pathname}${window.location.hash}` !== nextUrl) window.history.pushState({}, '', nextUrl);
     setRoomCode('');
     setPage(nextPage);
     if (nextPage !== 'assay') setResult(null);
-    if (target === 'image') window.setTimeout(() => document.getElementById('nailoong-image-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    if (target === 'studio') window.setTimeout(() => document.getElementById('character-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     else window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const openImageStudio = () => {
-    navigate('lab', 'image');
+  const openMediaStudio = () => {
+    navigate('lab', 'studio');
   };
 
   const openRoom = (code) => {
@@ -106,12 +118,12 @@ export default function App() {
     <Header page={page} onNavigate={navigate}/>
     {page === 'assay' && result ? <ResultPage result={result} onReset={() => setResult(null)} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'assay' && !result ? <AssayPage onComplete={completeAssessment} onNavigate={navigate}/> : null}
-    {page === 'lab' ? <LabPage latestResult={latestResult} onNavigate={navigate} onReactionComplete={applyReaction} imageTask={imageTask} imageJob={imageJob}/> : null}
+    {page === 'lab' ? <LabPage latestResult={latestResult} onNavigate={navigate} onReactionComplete={applyReaction} mediaTask={mediaTask} mediaJob={mediaJob}/> : null}
     {page === 'hao' ? <HaoPage onNavigate={navigate}/> : null}
     {page === 'friends' ? <FriendsPage roomCode={roomCode} latestResult={latestResult} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'archive' ? <ArchivePage history={history} onSelectHistory={(item) => { setResult(item); setPage('assay'); window.scrollTo({ top: 0 }); }} onClear={clear}/> : null}
     <footer className="editorial-footer"><strong>豪气宇宙</strong><span>原始内容不保存，结果仅供娱乐。</span></footer>
-    <ImageGenerationDock job={imageJob} onOpen={openImageStudio} onDismiss={imageTask.dismiss}/>
+    <MediaGenerationDock job={mediaJob} onOpen={openMediaStudio} onDismiss={mediaTask.dismiss}/>
     <MobileNav page={page} onNavigate={navigate}/>
   </div>;
 }

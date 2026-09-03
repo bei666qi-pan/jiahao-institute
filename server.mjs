@@ -7,6 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { calculateEstimatedCost, Observability } from './server/observability.mjs';
 import { loginAdmin, logoutAdmin, verifyAdmin } from './server/admin-auth.mjs';
 import { generateAbstractImage } from './server/image-generation.mjs';
+import { PostgresFeedbackStore, normalizeFeedback } from './server/feedback.mjs';
+import {
+  PostgresVideoGenerationStore,
+  VideoGenerationError,
+  createArkVideoProvider,
+  createVideoGenerationService,
+} from './server/video-generation.mjs';
 import { resolveTextProvider } from './server/text-provider.mjs';
 import {
   buildAssessmentV2,
@@ -26,20 +33,22 @@ const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
 const TEXT_PROVIDER = resolveTextProvider(process.env);
 const ARK_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 const ARK_IMAGE_URL = process.env.ARK_IMAGE_URL || `${ARK_API_BASE}/images/generations`;
+const ARK_VIDEO_URL = process.env.ARK_VIDEO_URL || `${ARK_API_BASE}/contents/generations/tasks`;
 const VISION_API_BASE = (process.env.ARK_IMAGE_API_KEY ? ARK_IMAGE_URL.replace(/\/images\/generations$/, '') : ARK_API_BASE).replace(/\/$/, '');
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
 const VISION_API_KEY = process.env.ARK_IMAGE_API_KEY || process.env.ARK_API_KEY;
 const IMAGE_CONFIG = {
-  referenceImageUrl: process.env.IMAGE_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/nailoong/arms.webp',
-  minimax: {
-    key: process.env.MINIMAX_API_KEY || '',
-    url: process.env.MINIMAX_IMAGE_URL || 'https://api.minimaxi.com/v1/image_generation',
-    model: process.env.MINIMAX_IMAGE_MODEL || 'image-01',
+  references: {
+    nailoong: process.env.NAILOONG_REFERENCE_URL || process.env.IMAGE_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/nailoong/arms.webp',
+    jiahao: [
+      process.env.JIAHAO_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/jiahao/hao-universe-hero.webp',
+      process.env.JIAHAO_SECONDARY_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/jiahao/hao-assay-editorial.webp',
+    ],
   },
   volcengine: {
     key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
     url: ARK_IMAGE_URL,
-    model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
+    model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-lite-260128',
   },
   quality: {
     key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
@@ -50,6 +59,20 @@ const IMAGE_CONFIG = {
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
 const observability = new Observability();
+const VIDEO_CONFIG = {
+  key: process.env.ARK_IMAGE_API_KEY || process.env.ARK_API_KEY || '',
+  url: ARK_VIDEO_URL,
+  model: process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-fast-260128',
+  references: {
+    nailoong: IMAGE_CONFIG.references.nailoong,
+    jiahao: IMAGE_CONFIG.references.jiahao[0],
+  },
+};
+const videoService = createVideoGenerationService({
+  store: new PostgresVideoGenerationStore(observability.pool),
+  provider: createArkVideoProvider(VIDEO_CONFIG),
+});
+const feedbackStore = new PostgresFeedbackStore(observability.pool);
 
 const DIMENSIONS = ['mystery', 'flex', 'niche', 'deep', 'show', 'language'];
 const TYPES = ['自在极意豪', '美式嘉豪', '深情破碎豪', '计算机嘉豪', '股票嘉豪', '不懂装懂豪', '小众优越豪', '潜伏嘉豪', '反向嘉豪', '无意炫耀豪'];
@@ -337,6 +360,37 @@ async function handleImageRequest(req, res) {
   }
 }
 
+async function handleVideoRequest(req, res, action) {
+  const started = performance.now();
+  const requestId = randomUUID();
+  let visitor = null;
+  try {
+    visitor = await observability.ensureVisitor(req);
+    const result = await action(visitor.visitorId);
+    const statusCode = result.statusCode || 200;
+    sendJson(res, statusCode, result.body, visitor.cookies);
+    void observability.recordApiRequest(req, {
+      requestId, endpoint: result.endpoint, mode: 'video_generation', provider: 'volcengine',
+      model: VIDEO_CONFIG.model, statusCode, ok: true, latencyMs: performance.now() - started,
+    });
+  } catch (error) {
+    const known = error instanceof VideoGenerationError || error?.code === 'VIDEO_DATABASE_NOT_CONFIGURED';
+    const statusCode = Number(error?.statusCode) || 503;
+    const code = known ? error.code : 'VIDEO_SERVICE_FAILED';
+    const message = known ? cleanText(error.message, '视频生成暂时不可用', 100) : '视频生成暂时不可用';
+    void observability.recordApiRequest(req, {
+      requestId, endpoint: '/api/videos', mode: 'video_generation', provider: 'volcengine',
+      model: VIDEO_CONFIG.model, statusCode, ok: false, latencyMs: performance.now() - started,
+      errorCode: code, errorMessage: message,
+    });
+    return sendJson(res, statusCode, {
+      error: message,
+      code,
+      ...(error?.activeTaskId ? { activeTaskId: error.activeTaskId } : {}),
+    }, visitor?.cookies || []);
+  }
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   let pathname = decodeURIComponent(url.pathname);
@@ -371,10 +425,22 @@ export const server = createServer(async (req, res) => {
       textModel: TEXT_PROVIDER.model,
       visionModel: VISION_MODEL,
       imageGeneration: {
-        minimaxConfigured: Boolean(IMAGE_CONFIG.minimax.key),
-        volcengineConfigured: Boolean(IMAGE_CONFIG.volcengine.key),
-        priority: ['volcengine', 'minimax'],
+        configured: Boolean(IMAGE_CONFIG.volcengine.key),
+        provider: 'volcengine',
+        model: IMAGE_CONFIG.volcengine.model,
+        characters: {
+          nailoong: Boolean(IMAGE_CONFIG.references.nailoong),
+          jiahao: Boolean(IMAGE_CONFIG.references.jiahao),
+        },
       },
+      videoGeneration: {
+        configured: Boolean(VIDEO_CONFIG.key),
+        databaseConfigured: observability.enabled,
+        provider: 'volcengine',
+        model: VIDEO_CONFIG.model,
+        dailyLimit: 1,
+      },
+      feedback: { configured: observability.enabled },
       observability: observability.status(),
     });
 
@@ -433,11 +499,38 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'POST' && pathname === '/api/court') return handleModelRequest(req, res, pathname, analyzePkWithModel);
     if (req.method === 'POST' && pathname === '/api/quote') return handleModelRequest(req, res, pathname, generateQuoteWithModel);
     if (req.method === 'POST' && pathname === '/api/images/generate') return handleImageRequest(req, res);
+    if (req.method === 'POST' && pathname === '/api/feedback') {
+      if (!observability.enabled) return sendJson(res, 503, { error: '意见反馈服务尚未配置', code: 'FEEDBACK_DATABASE_NOT_CONFIGURED' });
+      const visitor = await observability.ensureVisitor(req);
+      const feedback = normalizeFeedback(await readJson(req));
+      const feedbackId = await feedbackStore.create(visitor.visitorId, feedback);
+      return sendJson(res, 201, { accepted: true, id: feedbackId }, visitor.cookies);
+    }
+    if (req.method === 'GET' && pathname === '/api/videos/quota') {
+      return handleVideoRequest(req, res, async (visitorId) => ({
+        endpoint: '/api/videos/quota',
+        body: await videoService.quota(visitorId),
+      }));
+    }
+    if (req.method === 'POST' && pathname === '/api/videos/tasks') {
+      return handleVideoRequest(req, res, async (visitorId) => ({
+        endpoint: '/api/videos/tasks', statusCode: 202,
+        body: await videoService.create(visitorId, await readJson(req)),
+      }));
+    }
+    const videoTaskMatch = pathname.match(/^\/api\/videos\/tasks\/([0-9a-f-]{36})$/i);
+    if (req.method === 'GET' && videoTaskMatch) {
+      return handleVideoRequest(req, res, async (visitorId) => ({
+        endpoint: '/api/videos/tasks/:id',
+        body: await videoService.status(videoTaskMatch[1], visitorId),
+      }));
+    }
     if (req.method === 'GET' || req.method === 'HEAD') return await serveStatic(req, res);
     return sendJson(res, 405, { error: '不支持的请求方式' });
   } catch (error) {
     const message = error?.name === 'AbortError' ? '大模型响应超时' : cleanText(error?.message, '服务暂时不可用', 100);
-    return sendJson(res, message.includes('体积') ? 413 : 503, { error: message });
+    const statusCode = Number(error?.statusCode) || (message.includes('体积') ? 413 : 503);
+    return sendJson(res, statusCode, { error: message, ...(error?.code ? { code: error.code } : {}) });
   }
 });
 

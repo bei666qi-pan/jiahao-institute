@@ -107,59 +107,108 @@ const IMAGE_RATIOS = [
   { id: '16:9', label: '横版 16:9' },
 ];
 
-function AbstractImageGame({ imageTask, imageJob, onNavigate, open, onToggle }) {
-  const [prompt, setPrompt] = useState('在雨夜撑伞等公交，神态平静得不合时宜');
+const STUDIO_CHARACTERS = {
+  nailoong: {
+    name: '奶龙', eyebrow: 'SOFT CHAOS', image: ASSETS.arms,
+    prompt: '在雨夜撑伞等公交，神态平静得不合时宜',
+    question: '想让奶龙出现在什么现场？',
+  },
+  jiahao: {
+    name: '嘉豪', eyebrow: 'BLUE ATTITUDE', image: '/assets/jiahao/hao-universe-hero.webp',
+    prompt: '在电蓝片场里回头，像刚说完一句懂的都懂',
+    question: '想让嘉豪演一个什么场面？',
+  },
+};
+
+const ACTIVE_STATES = new Set(['submitting', 'queued', 'running', 'finalizing']);
+const STAGE_COPY = {
+  submitting: ['提交中', '正在安全地送往创作引擎'],
+  queued: ['排队中', '任务已接受，正在等待开拍'],
+  running: ['创作中', '角色和场景正在成形'],
+  finalizing: ['收尾中', '正在准备可播放的成片'],
+};
+
+function CharacterStudio({ mediaTask, mediaJob, onNavigate, open, onToggle }) {
+  const [character, setCharacter] = useState('nailoong');
+  const [mediaType, setMediaType] = useState('image');
+  const [prompt, setPrompt] = useState(STUDIO_CHARACTERS.nailoong.prompt);
   const [scene, setScene] = useState('cinematic');
   const [aspectRatio, setAspectRatio] = useState('1:1');
-  const result = imageJob.result;
-  const error = imageJob.status === 'error' ? '这张图没生成出来，换个说法再试一次。' : '';
-  const busy = imageJob.status === 'running';
+  const [quota, setQuota] = useState(null);
+  const [quotaError, setQuotaError] = useState('');
+  const result = mediaJob.result;
+  const busy = ACTIVE_STATES.has(mediaJob.status);
+  const selected = STUDIO_CHARACTERS[character];
+
+  useEffect(() => {
+    if (!open || mediaType !== 'video') return;
+    let active = true;
+    apiRequest('/api/videos/quota').then((value) => {
+      if (active) { setQuota(value); setQuotaError(''); }
+    }).catch((error) => {
+      if (active) setQuotaError(error.message);
+    });
+    return () => { active = false; };
+  }, [open, mediaType, mediaJob.status]);
+
+  const chooseCharacter = (next) => {
+    setCharacter(next);
+    setPrompt(STUDIO_CHARACTERS[next].prompt);
+  };
 
   const generate = async () => {
-    trackProductEvent('lab_game_started', { game: 'image' });
+    trackProductEvent('lab_game_started', { game: mediaType });
     try {
-      const payload = await imageTask.start({ prompt, scene, aspectRatio });
-      trackProductEvent('lab_game_completed', { game: 'image', outcome: payload.provider });
+      const payload = await mediaTask.start({ mediaType, character, prompt, scene, aspectRatio });
+      if (mediaType === 'image') trackProductEvent('lab_game_completed', { game: 'image', outcome: payload.provider });
+      if (payload.quota) setQuota(payload.quota);
     } catch { /* 全站任务栏会保留可重试状态 */ }
   };
 
   const imageSource = result?.imageDataUrl || result?.imageUrl;
-  return <section id="nailoong-image-studio" className={`lab-panel image-lab-panel ${open ? 'open' : ''}`}>
+  const outputCharacter = STUDIO_CHARACTERS[result?.character || mediaJob.character || character];
+  const stage = STAGE_COPY[mediaJob.status];
+  return <section id="character-studio" className={`lab-panel image-lab-panel character-studio character-${character} ${open ? 'open' : ''}`}>
     <button type="button" className="panel-heading" onClick={onToggle} aria-expanded={open}>
-      <strong>奶蛙生图局</strong><small>把离谱脑洞变成现场</small><Icon name="image"/>
+      <strong>角色创作室</strong><small>奶龙与嘉豪，图片和视频分开创作</small><Icon name="image"/>
     </button>
     {open ? <div className="image-lab-body">
       <div className="image-lab-controls">
-        <label className="image-prompt-label" htmlFor="abstract-image-prompt">你想让奶蛙干什么？</label>
-        <textarea id="abstract-image-prompt" value={prompt} maxLength={500} onChange={(event) => setPrompt(event.target.value)} />
+        <div className="studio-kicker"><span>01 / 选择角色</span><b>{selected.eyebrow}</b></div>
+        <div className="character-switch" role="group" aria-label="选择创作角色">{Object.entries(STUDIO_CHARACTERS).map(([id, item]) => <button type="button" key={id} aria-pressed={character === id} onClick={() => chooseCharacter(id)}><img src={item.image} alt=""/><span><b>{item.name}</b><small>{id === 'nailoong' ? '软萌荒诞主角' : '电蓝电影感主角'}</small></span></button>)}</div>
+        <div className="studio-kicker"><span>02 / 选择媒介</span><b>{mediaType === 'video' ? '5 SEC MOTION' : 'STILL FRAME'}</b></div>
+        <div className="media-switch" role="group" aria-label="选择图片或视频"><button type="button" aria-pressed={mediaType === 'image'} onClick={() => setMediaType('image')}><Icon name="image" size={18}/> 图片</button><button type="button" aria-pressed={mediaType === 'video'} onClick={() => setMediaType('video')}><Icon name="spark" size={18}/> 视频 <em>每日 1 次</em></button></div>
+        <label className="image-prompt-label" htmlFor="character-media-prompt">03 / {selected.question}</label>
+        <textarea id="character-media-prompt" value={prompt} maxLength={500} onChange={(event) => setPrompt(event.target.value)} />
         <fieldset className="image-choice-group"><legend>情境滤镜</legend><div>{IMAGE_SCENES.map((item) => <button type="button" key={item.id} aria-pressed={scene === item.id} onClick={() => setScene(item.id)}>{item.label}</button>)}</div></fieldset>
         <fieldset className="image-choice-group"><legend>画面比例</legend><div>{IMAGE_RATIOS.map((item) => <button type="button" key={item.id} aria-pressed={aspectRatio === item.id} onClick={() => setAspectRatio(item.id)}>{item.label}</button>)}</div></fieldset>
-        {error ? <div className="form-message error" role="alert">{error}</div> : null}
-        <button type="button" className="yellow-button image-generate-button" disabled={busy || prompt.trim().length < 2} onClick={generate}>{busy ? '正在生成，放心去逛…' : '生成抽象现场'} <Icon name="image"/></button>
-        <p className="privacy-line"><Icon name="lock" size={15}/> 这是生成图，别当真；描述和图片不会保存。</p>
+        {mediaType === 'video' ? <p className={`video-quota ${quota?.remaining === 0 ? 'empty' : ''}`}>{quotaError ? `额度暂时无法核验：${quotaError}` : quota ? `今日可用 ${quota.remaining} / ${quota.limit} · 上海时间零点重置` : '正在核验今日额度…'}</p> : null}
+        {['failed', 'exhausted'].includes(mediaJob.status) ? <div className="form-message error" role="alert">{mediaJob.status === 'exhausted' ? '今天的视频额度已用完，已接受的任务仍会继续。' : mediaJob.message || '作品没有生成出来，换个友善的说法再试。'}</div> : null}
+        <button type="button" className="yellow-button image-generate-button" disabled={busy || prompt.trim().length < 2 || (mediaType === 'video' && (quotaError || quota?.remaining === 0))} onClick={generate}>{busy ? `${outputCharacter.name}${mediaJob.mediaType === 'video' ? '视频' : '图片'}正在创作` : `生成${selected.name}${mediaType === 'video' ? '视频' : '图片'}`} <Icon name={mediaType === 'video' ? 'spark' : 'image'}/></button>
+        <p className="privacy-line"><Icon name="lock" size={15}/> AI 生成内容会带水印；不保存你的描述或生成内容。</p>
       </div>
       <div className="image-lab-output" aria-live="polite">
-        {busy ? <div className="image-generating"><span>后台生成中</span><strong>不用在这等。</strong><p>切去鉴定、反应局或好友房，画好后右下角会提醒你。</p><div><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做鉴定</button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>去好友房</button></div></div> : imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
-          <img src={imageSource} alt="生成的抽象奶蛙场景"/>
-          <figcaption><strong>图好了，拿去整活。</strong><a className="outline-button" href={imageSource} download={`奶蛙抽象现场-${result.id || 'image'}.jpg`}>下载图片 <Icon name="download" size={18}/></a></figcaption>
-        </figure> : <div className="image-empty"><img src={ASSETS.umbrella} alt="等待生成的抽象奶蛙"/><span>把一个不合时宜的场面<br/>交给奶蛙来演</span></div>}
+        {busy && stage ? <div className="image-generating studio-waiting" data-character={mediaJob.character}><span>{stage[0]}</span><img src={outputCharacter.image} alt={`${outputCharacter.name}创作中`}/><strong>{stage[1]}</strong><p>没有虚构进度条。你可以继续浏览，右下角会保留真实阶段。</p><div><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做鉴定</button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>去好友房</button></div></div> : mediaJob.status === 'succeeded' && result?.mediaType === 'video' && result.videoUrl ? <figure className="image-result-figure video-result-figure" data-ratio={result.aspectRatio}><video src={result.videoUrl} controls preload="metadata" aria-label={`生成的${outputCharacter.name}视频`}/><figcaption><strong>{outputCharacter.name}开拍完成。</strong><a className="outline-button" href={result.videoUrl} download={`${outputCharacter.name}视频-${result.id}.mp4`}>下载视频 <Icon name="download" size={18}/></a></figcaption></figure> : mediaJob.status === 'succeeded' && imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
+          <img src={imageSource} alt={`生成的${outputCharacter.name}场景`}/>
+          <figcaption><strong>{outputCharacter.name}图片已完成。</strong><a className="outline-button" href={imageSource} download={`${outputCharacter.name}创作-${result.id || 'image'}.jpg`}>下载图片 <Icon name="download" size={18}/></a></figcaption>
+        </figure> : <div className="image-empty studio-preview" data-character={character}><span className="preview-label">{selected.eyebrow}</span><img src={selected.image} alt={`等待创作的${selected.name}`}/><strong>{selected.name} × {mediaType === 'video' ? '动态画面' : '静态画面'}</strong><span>选好角色和媒介<br/>一句话开始创作</span></div>}
       </div>
     </div> : null}
   </section>;
 }
 
-export function LabPage({ latestResult, onNavigate, onReactionComplete, imageTask, imageJob }) {
-  const [activeTool, setActiveTool] = useState(() => imageJob.status !== 'idle' || window.location.hash === '#nailoong-image-studio' ? 'image' : '');
+export function LabPage({ latestResult, onNavigate, onReactionComplete, mediaTask, mediaJob }) {
+  const [activeTool, setActiveTool] = useState(() => mediaJob.status !== 'idle' || window.location.hash === '#character-studio' ? 'studio' : '');
 
   useEffect(() => {
-    if (imageJob.status !== 'idle') setActiveTool('image');
-  }, [imageJob.status]);
+    if (mediaJob.status !== 'idle') setActiveTool('studio');
+  }, [mediaJob.status]);
 
   const toggleTool = (tool) => setActiveTool((current) => current === tool ? '' : tool);
 
   return <main className="lab-page">
     <header className="lab-title"><div><h1>奶龙实验室</h1><p>这里单独玩奶龙。五道题，看你的真实反应。</p></div>{latestResult?.nailoong ? <div className="persistent-score"><span>上次奶龙指数 <b>{latestResult.nailoong.score}</b></span></div> : null}</header>
     <section className="lab-panel reaction-panel"><div className="panel-heading static"><strong>奶龙反应局</strong><small>五道题，看看你会怎么接</small><Icon name="flask"/></div><ReactionGame onReactionComplete={onReactionComplete}/></section>
-    <section className="lab-tool-rail" aria-label="更多奶龙玩法"><AbstractCourt open={activeTool === 'court'} onToggle={() => toggleTool('court')}/><section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section><AbstractImageGame imageTask={imageTask} imageJob={imageJob} onNavigate={onNavigate} open={activeTool === 'image'} onToggle={() => toggleTool('image')}/></section>
+    <section className="lab-tool-rail" aria-label="更多奶龙玩法"><AbstractCourt open={activeTool === 'court'} onToggle={() => toggleTool('court')}/><section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section><CharacterStudio mediaTask={mediaTask} mediaJob={mediaJob} onNavigate={onNavigate} open={activeTool === 'studio'} onToggle={() => toggleTool('studio')}/></section>
   </main>;
 }

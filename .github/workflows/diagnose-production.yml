@@ -104,13 +104,18 @@ jobs:
           image_code=$(curl --silent --show-error --location --ipv4 --http1.1 \
             --connect-timeout 10 --max-time 180 \
             --request POST --header 'Content-Type: application/json' \
-            --data '{"prompt":"浅黄色软体玩偶在暖白摄影棚里认真整理一叠黄色便签","scene":"editorial","aspectRatio":"1:1"}' \
+            --data '{"character":"nailoong","prompt":"在暖白摄影棚里认真整理一叠黄色便签","scene":"editorial","aspectRatio":"1:1"}' \
             --output /tmp/image.json --write-out '%{http_code}' \
             "${PRODUCTION_URL%/}/api/images/generate")
-          image_summary=$(jq -c '{provider,source,hasImage:(((.imageDataUrl // .imageUrl // "") | length) > 0),fallback}' /tmp/image.json)
+          image_summary=$(jq -c '{provider,model,character,mediaType,quality,hasImage:(((.imageDataUrl // .imageUrl // "") | length) > 0)}' /tmp/image.json)
           echo "image HTTP ${image_code}: ${image_summary}"
           test "${image_code}" = '200'
-          jq -e '.provider == "volcengine" and (((.imageDataUrl // .imageUrl // "") | length) > 0)' /tmp/image.json >/dev/null
+          jq -e '.provider == "volcengine"
+            and .model == "doubao-seedream-5-0-lite-260128"
+            and .character == "nailoong"
+            and .mediaType == "image"
+            and (.quality.status == "verified" or .quality.status == "unavailable")
+            and (((.imageDataUrl // .imageUrl // "") | length) > 0)' /tmp/image.json >/dev/null
 
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

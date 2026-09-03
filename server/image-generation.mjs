@@ -1,11 +1,11 @@
 const ALLOWED_RATIOS = new Set(['1:1', '3:4', '16:9']);
-export const IMAGE_PROVIDER_TIMEOUTS = Object.freeze({ minimax: 45_000, volcengine: 90_000 });
-// Seedream 5.0 Lite requires at least 3,686,400 output pixels.
+const ALLOWED_CHARACTERS = new Set(['nailoong', 'jiahao']);
+export const IMAGE_PROVIDER_TIMEOUTS = Object.freeze({ volcengine: 90_000 });
 const SIZE_BY_RATIO = { '1:1': '2048x2048', '3:4': '1728x2304', '16:9': '2560x1440' };
 const SCENES = {
-  editorial: '暖白摄影棚、档案照构图、柔和低清3D质感、克制留白',
-  cinematic: '雨夜电影感、潮湿街道、冷灰环境光、角色仍保持柔和低清3D质感',
-  prank: '朋友整活现场、荒诞但友善、抓拍构图、轻微失焦的网络梗图质感',
+  editorial: '暖白摄影棚、档案照构图、克制留白',
+  cinematic: '雨夜电影感、潮湿街道、冷灰环境光',
+  prank: '朋友整活现场、荒诞但友善、抓拍构图',
   awkward: '大型社死现场、所有人都沉默、一本正经的荒诞构图',
 };
 
@@ -24,197 +24,129 @@ export function normalizeImageRequest(payload = {}) {
   const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim().slice(0, 500) : '';
   if (prompt.length < 2) throw new ImageGenerationError('至少输入两个字', { statusCode: 400, code: 'INVALID_PROMPT' });
   return {
+    character: ALLOWED_CHARACTERS.has(payload.character) ? payload.character : 'nailoong',
     prompt,
     aspectRatio: ALLOWED_RATIOS.has(payload.aspectRatio) ? payload.aspectRatio : '1:1',
     scene: Object.hasOwn(SCENES, payload.scene) ? payload.scene : 'cinematic',
   };
 }
 
-export function buildAbstractImagePrompt(userPrompt, scene = 'cinematic') {
-  const sceneDirection = SCENES[scene] || SCENES.cinematic;
-  return `创作一张中文互联网抽象梗图。把参考图中的浅黄色软体人形玩偶作为唯一角色，严格保持参考图的身体比例、脸和材质，不做任何物种化改造。角色是直立的圆胖大豆包轮廓，头顶与身体两侧完全光滑，没有耳朵、角或尾巴；没有鼻子，没有鼻孔；米白肚皮呈椭圆形并占身体大部分；脸上只能有两只眼睛，两只眼睛都是浅绿色凸眼圆盘加一个黑色小瞳孔，不能增加第二对眼睛或任何圆形鼻孔；脸上只有一条短短的水平细线嘴，嘴始终闭合，不能画嘴唇、口腔、牙齿或外凸口鼻。灰褐色手脚必须像简单圆润的一体化软手套和脚套，不能画成人类写实手脚。四肢短粗，神态放空又一本正经。保持参考图那种低清、柔和、略笨拙的早期3D网络衍生质感。禁止改变角色设计；禁止写实皮肤、动物特征、怪物化、尖牙、大嘴、黏液、恶心或恐怖元素。场景方向：${sceneDirection}。用户情境：${userPrompt}。画面不要出现文字、品牌标志或界面。`;
+function nailoongPrompt(userPrompt, sceneDirection) {
+  return `以参考图中的浅黄色软体玩偶为唯一主角，保持相同的圆胖豆包轮廓、光滑头顶、米白椭圆肚皮、两只浅绿色凸眼圆盘、闭合水平细线嘴与灰褐色圆润手脚。神态放松、一本正经，质感友善柔和。场景：${sceneDirection}。情节：${userPrompt}。画面干净，不放置文字、品牌标志或界面。`;
 }
 
-function providerError(provider, status, details = '') {
-  const detailCode = typeof details === 'object' ? String(details?.code || '') : '';
-  const detailMessage = typeof details === 'object' ? String(details?.message || '') : String(details || '');
-  const diagnostic = `${detailCode} ${detailMessage}`.trim();
-  if (status === 400 || status === 422) {
-    if (/prompt|content|safety|sensitive|敏感|违规/i.test(diagnostic)) {
-      return new ImageGenerationError('图片描述未通过校验，请换个友善的说法', {
-        statusCode: 400, code: 'INVALID_PROMPT', provider, fallbackEligible: false,
-      });
-    }
-    return new ImageGenerationError(`${provider === 'minimax' ? 'MiniMax' : '火山引擎'}图片服务参数不兼容`, {
-      statusCode: 503, code: 'PROVIDER_INVALID_PARAMETER', provider, fallbackEligible: false,
-    });
+function jiahaoPrompt(userPrompt, sceneDirection) {
+  return `创作一张具有中文互联网幽默感的电影感人物图。参考图中的嘉豪人物是唯一主角，必须保持同一人物的脸型、发型、身材比例和整体气质，保留克制、略带距离感的镜头表现；不得替换成其他人物，不得卡通化、怪物化或改变身份特征。服装和动作可随情境自然调整，画面友善，不丑化人物。场景方向：${sceneDirection}，加入克制的电蓝视觉线索。用户情境：${userPrompt}。画面不要出现文字、品牌标志或界面。`;
+}
+
+export function buildAbstractImagePrompt(userPrompt, scene = 'cinematic', character = 'nailoong') {
+  const direction = SCENES[scene] || SCENES.cinematic;
+  return character === 'jiahao' ? jiahaoPrompt(userPrompt, direction) : nailoongPrompt(userPrompt, direction);
+}
+
+function providerError(status, details = {}) {
+  const diagnostic = `${details?.code || ''} ${details?.message || ''}`.trim();
+  if (details?.code === 'OutputImageSensitiveContentDetected') {
+    return new ImageGenerationError('生成结果被火山误拦截', { statusCode: 503, code: 'OUTPUT_SAFETY_RETRYABLE', provider: 'volcengine' });
   }
-  const reason = status === 429 ? 'rate_limited' : status === 402 ? 'quota_exhausted' : status === 401 || status === 403 ? 'authentication_failed' : status >= 500 ? 'provider_unavailable' : 'provider_failed';
-  return new ImageGenerationError(`${provider === 'minimax' ? 'MiniMax' : '火山引擎'}图片服务暂时不可用${detailMessage ? `（${detailMessage.slice(0, 40)}）` : ''}`, {
-    statusCode: 503, code: reason.toUpperCase(), provider, fallbackEligible: true,
-  });
+  if ((status === 400 || status === 422) && /prompt|content|safety|sensitive|敏感|违规/i.test(diagnostic)) {
+    return new ImageGenerationError('图片描述未通过校验，请换个友善的说法', { statusCode: 400, code: 'INVALID_PROMPT', provider: 'volcengine' });
+  }
+  if (status === 400 || status === 422) return new ImageGenerationError('火山引擎图片服务参数不兼容', { code: 'PROVIDER_INVALID_PARAMETER', provider: 'volcengine' });
+  const code = status === 429 ? 'RATE_LIMITED' : status === 402 ? 'QUOTA_EXHAUSTED' : status === 401 || status === 403 ? 'AUTHENTICATION_FAILED' : 'PROVIDER_FAILED';
+  return new ImageGenerationError('火山引擎图片服务暂时不可用', { code, provider: 'volcengine' });
 }
 
-async function postImage(provider, url, key, body, fetchImpl, timeoutMs = IMAGE_PROVIDER_TIMEOUTS[provider]) {
+async function postImage(url, key, body, fetchImpl) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), IMAGE_PROVIDER_TIMEOUTS.volcengine);
   try {
     const response = await fetchImpl(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw providerError(provider, response.status, {
-      code: data?.error?.code || data?.base_resp?.status_code || '',
-      message: data?.error?.message || data?.base_resp?.status_msg || '',
-    });
+    if (!response.ok) throw providerError(response.status, { code: data?.error?.code, message: data?.error?.message });
     return data;
   } catch (error) {
     if (error instanceof ImageGenerationError) throw error;
-    const reason = error?.name === 'AbortError' ? 'timeout' : 'network_error';
-    throw new ImageGenerationError(`${provider === 'minimax' ? 'MiniMax' : '火山引擎'}图片服务响应失败`, {
-      statusCode: 503, code: reason.toUpperCase(), provider, fallbackEligible: true,
+    throw new ImageGenerationError('火山引擎图片服务响应失败', {
+      code: error?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR', provider: 'volcengine',
     });
-  } finally {
-    clearTimeout(timeout);
-  }
+  } finally { clearTimeout(timeout); }
 }
 
-function imageResult(provider, model, data, fallback) {
-  const base64 = provider === 'minimax' ? data?.data?.image_base64?.[0] : data?.data?.[0]?.b64_json;
-  const imageUrl = provider === 'minimax' ? data?.data?.image_urls?.[0] : data?.data?.[0]?.url;
-  if (!base64 && !imageUrl) throw new ImageGenerationError('图片服务没有返回可用图片', {
-    statusCode: 503, code: 'EMPTY_IMAGE', provider, fallbackEligible: true,
-  });
+function imageResult(data, config, request) {
+  const base64 = data?.data?.[0]?.b64_json;
+  const imageUrl = data?.data?.[0]?.url;
+  if (!base64 && !imageUrl) throw new ImageGenerationError('图片服务没有返回可用图片', { code: 'EMPTY_IMAGE', provider: 'volcengine' });
   return {
-    id: String(data?.id || `${provider}-${Date.now()}`),
-    provider,
-    model,
-    source: `${provider === 'minimax' ? 'MiniMax 图片生成' : '火山引擎图片生成'}${fallback.used ? ' · 自动降级' : ''}`,
+    id: String(data?.id || `volcengine-${Date.now()}`),
+    character: request.character,
+    mediaType: 'image',
+    provider: 'volcengine',
+    model: config.model,
+    source: '火山引擎图片生成',
     ...(base64 ? { imageDataUrl: `data:image/jpeg;base64,${base64}` } : { imageUrl }),
-    fallback,
+    aspectRatio: request.aspectRatio,
   };
 }
 
 function extractJsonObject(value) {
-  if (typeof value !== 'string') throw new Error('empty quality response');
-  const start = value.indexOf('{');
-  const end = value.lastIndexOf('}');
+  const start = String(value || '').indexOf('{');
+  const end = String(value || '').lastIndexOf('}');
   if (start < 0 || end <= start) throw new Error('invalid quality response');
-  return JSON.parse(value.slice(start, end + 1));
+  return JSON.parse(String(value).slice(start, end + 1));
+}
+
+function qualityPrompt(character) {
+  if (character === 'jiahao') return '你是图片角色一致性质检员。只判断人物身份，只返回 JSON：{"passes":true或false,"reason":"一句短理由"}。生成图必须与嘉豪参考人物保持同一人的脸型、发型、身材比例和整体气质；换人、明显脸部漂移、卡通化或怪物化必须为 false。';
+  return '你是图片角色一致性质检员。只判断角色身份，只返回 JSON：{"passes":true或false,"reason":"一句短理由"}。必须是浅黄色圆胖软体人形、米白椭圆肚皮、只有两只浅绿色圆盘眼睛和一条闭合水平细线嘴；出现额外黑眼、鼻子、耳朵、角、尾巴、张嘴或牙齿必须为 false。';
 }
 
 async function assertImageIdentity(result, quality, fetchImpl) {
-  if (!quality?.key || !quality?.url || !quality?.model) return;
-  const image = result.imageDataUrl || result.imageUrl;
+  if (!quality?.key || !quality?.url || !quality?.model) return { status: 'unavailable' };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 35_000);
   try {
     const response = await fetchImpl(quality.url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${quality.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: quality.model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是图片角色一致性质检员。只判断角色身份，不检查构图、动作、道具、文字、水印或背景。只返回 JSON：{"passes":true或false,"reason":"一句短理由"}。必须同时满足：全身是浅黄色圆胖软体人形；米白椭圆肚皮；只有两只浅绿色圆盘眼睛且每只只有一个黑色小瞳孔；只有一条闭合水平细线嘴；灰褐色圆润手套状手掌和脚套是角色的正确特征，应判为合格。出现额外黑眼、鼻子、鼻孔、耳朵、角、尾巴、张嘴、牙齿，或肉色并带清晰五指的写实人类手脚时，passes 必须为 false。',
-          },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: '检查这张生成图，只返回 JSON。' },
-              { type: 'image_url', image_url: { url: image } },
-            ],
-          },
-        ],
-        temperature: 0,
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
+      method: 'POST', headers: { Authorization: `Bearer ${quality.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: quality.model, messages: [
+        { role: 'system', content: qualityPrompt(result.character) },
+        { role: 'user', content: [{ type: 'text', text: '检查这张生成图，只返回 JSON。' }, { type: 'image_url', image_url: { url: result.imageDataUrl || result.imageUrl } }] },
+      ], temperature: 0, response_format: { type: 'json_object' } }), signal: controller.signal,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    const verdict = extractJsonObject(data?.choices?.[0]?.message?.content);
-    if (verdict.passes !== true) throw new ImageGenerationError('生成角色与参考图不一致', {
-      statusCode: 503, code: 'IDENTITY_MISMATCH', provider: result.provider, fallbackEligible: true,
-    });
+    if (extractJsonObject(data?.choices?.[0]?.message?.content).passes !== true) throw new ImageGenerationError('生成角色与参考图不一致', { code: 'IDENTITY_MISMATCH', provider: 'volcengine' });
+    return { status: 'verified' };
   } catch (error) {
     if (error instanceof ImageGenerationError) throw error;
-    throw new ImageGenerationError('图片角色质检暂时不可用', {
-      statusCode: 503, code: 'QUALITY_CHECK_FAILED', provider: result.provider, fallbackEligible: true,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function callMinimax(request, config, referenceImageUrl, fetchImpl) {
-  const data = await postImage('minimax', config.url, config.key, {
-    model: config.model,
-    prompt: buildAbstractImagePrompt(request.prompt, request.scene),
-    aspect_ratio: request.aspectRatio,
-    response_format: 'base64',
-    n: 1,
-    prompt_optimizer: false,
-    aigc_watermark: true,
-    ...(referenceImageUrl ? { subject_reference: [{ type: 'character', image_file: referenceImageUrl }] } : {}),
-  }, fetchImpl);
-  const businessCode = Number(data?.base_resp?.status_code || 0);
-  if (businessCode !== 0) {
-    const details = String(data?.base_resp?.status_msg || '');
-    if (/prompt|content|safety|敏感|违规/i.test(details)) throw providerError('minimax', 400, details);
-    throw providerError('minimax', 503, details);
-  }
-  return imageResult('minimax', config.model, data, { used: false });
-}
-
-async function callVolcengine(request, config, referenceImageUrl, fetchImpl, fallback) {
-  const data = await postImage('volcengine', config.url, config.key, {
-    model: config.model,
-    prompt: buildAbstractImagePrompt(request.prompt, request.scene),
-    size: SIZE_BY_RATIO[request.aspectRatio],
-    response_format: 'b64_json',
-    watermark: true,
-    sequential_image_generation: 'disabled',
-    ...(referenceImageUrl ? { image: [referenceImageUrl] } : {}),
-  }, fetchImpl);
-  return imageResult('volcengine', config.model, data, fallback);
+    return { status: 'unavailable' };
+  } finally { clearTimeout(timeout); }
 }
 
 export async function generateAbstractImage(payload, config, fetchImpl = fetch) {
   const request = normalizeImageRequest(payload);
-  const minimax = config?.minimax || {};
   const volcengine = config?.volcengine || {};
-  const quality = config?.quality || {};
-  const referenceImageUrl = config?.referenceImageUrl || '';
-
-  const generateVolcengine = async (fallback = { used: false }) => {
-    const result = await callVolcengine(request, volcengine, referenceImageUrl, fetchImpl, fallback);
-    await assertImageIdentity(result, quality, fetchImpl);
-    return { ...result, aspectRatio: request.aspectRatio };
+  if (!volcengine.key) throw new ImageGenerationError('火山引擎图片生成服务尚未配置', { code: 'NOT_CONFIGURED' });
+  const configuredReference = config?.references?.[request.character] || (request.character === 'nailoong' ? config?.referenceImageUrl : '');
+  const referenceImages = (Array.isArray(configuredReference) ? configuredReference : [configuredReference]).filter(Boolean);
+  if (!referenceImages.length) throw new ImageGenerationError('角色参考图尚未配置', { code: 'REFERENCE_NOT_CONFIGURED' });
+  const body = {
+    model: volcengine.model,
+    prompt: buildAbstractImagePrompt(request.prompt, request.scene, request.character),
+    size: SIZE_BY_RATIO[request.aspectRatio], response_format: 'url', watermark: true,
+    sequential_image_generation: 'disabled', image: referenceImages,
   };
-
-  const generateMinimax = async (fallback = { used: false }) => {
-    const result = await callMinimax(request, minimax, referenceImageUrl, fetchImpl);
-    const tagged = { ...result, fallback, source: `MiniMax 图片生成${fallback.used ? ' · 自动降级' : ''}` };
-    await assertImageIdentity(tagged, quality, fetchImpl);
-    return { ...tagged, aspectRatio: request.aspectRatio };
-  };
-
-  if (volcengine.key) {
-    try {
-      return await generateVolcengine();
-    } catch (error) {
-      if (!error?.fallbackEligible) throw error;
-      if (!minimax.key) throw error;
-      const reason = String(error.code || 'provider_failed').toLowerCase();
-      return generateMinimax({ used: true, from: 'volcengine', reason });
-    }
+  let data;
+  try {
+    data = await postImage(volcengine.url, volcengine.key, body, fetchImpl);
+  } catch (error) {
+    if (error?.code !== 'OUTPUT_SAFETY_RETRYABLE') throw error;
+    data = await postImage(volcengine.url, volcengine.key, body, fetchImpl);
   }
-
-  if (!minimax.key) throw new ImageGenerationError('图片生成服务尚未配置', { statusCode: 503, code: 'NOT_CONFIGURED' });
-  return generateMinimax({ used: true, from: 'volcengine', reason: 'not_configured' });
+  const result = imageResult(data, volcengine, request);
+  result.quality = await assertImageIdentity(result, config?.quality, fetchImpl);
+  return result;
 }
