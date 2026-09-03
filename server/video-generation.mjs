@@ -195,7 +195,11 @@ export function createVideoGenerationService({ store, provider, enabled = true, 
       if (!task) throw new VideoGenerationError('视频任务不存在', { statusCode: 404, code: 'TASK_NOT_FOUND' });
       if (!TERMINAL.has(task.status) && task.providerTaskId) {
         const latest = await provider.get(task.providerTaskId);
-        task = await store.update(task.id, latest);
+        try {
+          task = await store.update(task.id, latest);
+        } catch {
+          task = { ...task, ...latest };
+        }
       }
       return publicTask(task, await quota(visitorId));
     },
