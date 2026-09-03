@@ -93,7 +93,7 @@ async function readBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function startMockServer(port = 0) {
+export async function startMockServer(port = 0, options = {}) {
   let callCount = 0;
   const calls = [];
 
@@ -118,7 +118,23 @@ export async function startMockServer(port = 0) {
         response = MOCK_RESPONSES.analyze;
       }
 
-      calls.push({ systemPrompt: systemPrompt.slice(0, 80), model: body.model, callCount });
+      calls.push({ systemPrompt: systemPrompt.slice(0, 80), model: body.model, request: body, callCount });
+
+      const analyzeContentSuffix = typeof options.analyzeContentSuffix === 'function'
+        ? options.analyzeContentSuffix({ callCount, body })
+        : options.analyzeContentSuffix;
+      if (analyzeContentSuffix && response === MOCK_RESPONSES.analyze) {
+        response = {
+          ...response,
+          choices: response.choices.map((choice) => ({
+            ...choice,
+            message: {
+              ...choice.message,
+              content: `${choice.message.content}${analyzeContentSuffix}`,
+            },
+          })),
+        };
+      }
 
       // Simulate some latency
       await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
