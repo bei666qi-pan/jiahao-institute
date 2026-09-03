@@ -161,6 +161,21 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await expect(page.getByText('奶龙本人（我）')).toBeVisible();
   });
 
+  test('好友首页先说明成绩前置条件，加入房间不被创建流程干扰', async ({ page }) => {
+    await openSection(page, '好友豪气榜', '好友');
+    const assessFirst = page.getByRole('button', { name: '先完成鉴定' });
+    await expect(assessFirst).toBeEnabled();
+
+    await assessFirst.click();
+    await completeTextAssessment(page, '测完以后带着成绩回好友页。', { expectResult: false });
+    await expect(page.getByRole('heading', { name: '好友豪气榜' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /单挑好友/ })).toBeVisible();
+
+    await page.getByRole('tab', { name: '加入房间' }).click();
+    await page.getByLabel('输入好友房间码').fill('jh8f32a');
+    await expect(page.getByRole('button', { name: '进入好友房' })).toBeEnabled();
+  });
+
   test('390×844下首页、实验室和好友页均无横向溢出', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();

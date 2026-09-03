@@ -23,6 +23,10 @@ function ReactionGame({ onReactionComplete }) {
   const [lastReaction, setLastReaction] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [customBusy, setCustomBusy] = useState(false);
+  const [customError, setCustomError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -52,9 +56,36 @@ function ReactionGame({ onReactionComplete }) {
     finally { setBusy(false); }
   };
 
+  const judgeCustom = async () => {
+    const question = challenge?.questions[answers.length];
+    const reaction = customInput.trim();
+    if (!question || reaction.length < 2) return setCustomError('至少写两个字，AI 才知道怎么判。');
+    setCustomBusy(true);
+    setCustomError('');
+    trackProductEvent('lab_game_started', { game: 'reaction_custom' });
+    try {
+      const payload = await postJson('/api/analyze', {
+        mode: 'text',
+        input: `情境：${question.prompt}\n我的真实反应：${reaction}`,
+      });
+      if (!payload?.nailoong) throw new Error('AI 暂时没判出来，请稍后再试。');
+      const judged = {
+        challengeId: `custom-${challenge.challengeId}`,
+        custom: true,
+        nailoong: payload.nailoong,
+        highlight: { asset: question.asset, tone: 'AI 自定义判别', reaction },
+      };
+      setResult(judged);
+      onReactionComplete(judged);
+      trackProductEvent('lab_game_completed', { game: 'reaction_custom', outcome: payload.nailoong.archetype });
+    } catch (nextError) {
+      setCustomError(nextError.message || 'AI 暂时没判出来，请稍后再试。');
+    } finally { setCustomBusy(false); }
+  };
+
   if (error) return <div className="game-error" role="alert"><strong>题目走丢了</strong><p>刷新一下，再来一局。</p></div>;
   if (!challenge) return <div className="game-loading">正在翻找今天的抽象题目…</div>;
-  if (result) return <div className="reaction-result"><div className="reaction-result-visual"><img src={ASSETS[result.highlight?.asset] || ASSETS.arms} alt="本局最抽象反应的奶蛙现场"/><span>{result.highlight?.tone}</span></div><div><span>本局奶龙指数</span><strong>{result.nailoong.score}</strong><h3>{result.nailoong.archetype}</h3><p>{result.nailoong.verdict}</p>{result.highlight ? <blockquote><small>本局高光</small>{result.highlight.reaction}</blockquote> : null}<button type="button" className="outline-button" onClick={() => { setAnswers([]); setResult(null); setLastReaction(null); setRun((value) => (value + 1) % 3); }}>下一套题 <Icon name="reset"/></button><small className="reaction-deck-count">今天还有不同剧情，三套题轮着玩。</small></div></div>;
+  if (result) return <div className="reaction-result"><div className="reaction-result-visual"><img src={ASSETS[result.highlight?.asset] || ASSETS.arms} alt="本局最抽象反应的奶蛙现场"/><span>{result.highlight?.tone}</span></div><div><span>{result.custom ? 'AI 判别奶龙指数' : '本局奶龙指数'}</span><strong>{result.nailoong.score}</strong><h3>{result.nailoong.archetype}</h3><p>{result.nailoong.verdict}</p>{result.highlight ? <blockquote><small>{result.custom ? '你的反应' : '本局高光'}</small>{result.highlight.reaction}</blockquote> : null}<button type="button" className="outline-button" onClick={() => { setAnswers([]); setResult(null); setLastReaction(null); setCustomInput(''); setCustomOpen(false); setRun((value) => (value + 1) % 3); }}>下一套题 <Icon name="reset"/></button><small className="reaction-deck-count">今天还有不同剧情，三套题轮着玩。</small></div></div>;
   if (busy || answers.length >= challenge.questions.length) return <div className="game-loading" aria-live="polite">正在汇总你的抽象反应…</div>;
 
   const question = challenge.questions[answers.length];
@@ -62,6 +93,10 @@ function ReactionGame({ onReactionComplete }) {
     <div className="reaction-copy"><div className="reaction-progress" aria-label={`第 ${answers.length + 1} 题，共 ${challenge.questions.length} 题`}>{challenge.questions.map((item, index) => <i key={item.id} className={index <= answers.length ? 'active' : ''}/>)}</div><strong>第 {run + 1} 套 · {answers.length + 1} / {challenge.questions.length}</strong><h3>{question.prompt}</h3>{lastReaction ? <p className="reaction-flash" role="status"><b>{lastReaction.tone}</b>{lastReaction.text}</p> : null}</div>
     <figure className="reaction-scene"><img src={ASSETS[question.asset]} alt={`${question.prompt}的奶蛙情境图`}/><figcaption>轮到你接招</figcaption></figure>
     <div className="reaction-options">{question.options.map((option) => <button type="button" className="reaction-option" key={option.id} onClick={() => choose(question.id, option.id)}><span>{option.label}<small>{option.tone}</small></span><Icon name="arrow" size={18}/></button>)}</div>
+    <div className={`reaction-custom ${customOpen ? 'open' : ''}`}>
+      <button type="button" className="reaction-custom-toggle" aria-expanded={customOpen} onClick={() => { setCustomOpen((value) => !value); setCustomError(''); }}><span><b>写自己的反应</b><small>不选预设，让 AI 单独判这一招</small></span><Icon name={customOpen ? 'close' : 'spark'} size={18}/></button>
+      {customOpen ? <div className="reaction-custom-form"><label htmlFor="custom-reaction">写下你的真实反应</label><textarea id="custom-reaction" maxLength={300} value={customInput} onChange={(event) => setCustomInput(event.target.value)} placeholder="例如：先沉默三秒，然后问大家要不要一起加班。"/><div><small>{customInput.length} / 300</small><button type="button" className="yellow-button" disabled={customBusy || customInput.trim().length < 2} onClick={judgeCustom}>{customBusy ? 'AI 正在判别…' : '交给 AI 判别'} <Icon name="spark" size={17}/></button></div>{customError ? <p className="form-message error" role="alert">{customError}</p> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 文字只用于本次娱乐判别，不会加入公开榜单。</p></div> : null}
+    </div>
   </div>;
 }
 

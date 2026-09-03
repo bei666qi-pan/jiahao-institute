@@ -16,9 +16,12 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
   const [nickname, setNickname] = useState(() => localStorage.getItem('jiahao-nickname') || '奶龙本人');
   const [roomName, setRoomName] = useState('好友抽象战绩房');
   const [joinCode, setJoinCode] = useState('');
+  const [entryMode, setEntryMode] = useState('create');
+  const [roomType, setRoomType] = useState('challenge');
   const [scoreView, setScoreView] = useState('jiahao');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const autoJoinRef = useRef(false);
 
   const loadSession = async () => {
@@ -80,6 +83,11 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
     onNavigate('assay');
   };
 
+  const startFriendAssessment = () => {
+    sessionStorage.setItem('jiahao-pending-destination', 'friends');
+    onNavigate('assay');
+  };
+
   useEffect(() => {
     const pendingRoom = sessionStorage.getItem('jiahao-pending-room');
     if (!roomCode || pendingRoom !== roomCode || !latestResult || !roomData || roomData.isMember || busy || autoJoinRef.current) return;
@@ -93,12 +101,17 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
       if (navigator.share) await navigator.share({ title: roomData?.room?.name || '好友整活房', text: '来看看我们谁更抽象。', url });
       else {
         await navigator.clipboard.writeText(url);
-        setError('邀请链接已复制。');
+        setNotice('邀请链接已复制，可以直接发给好友。');
       }
       trackProductEvent('share_clicked', { mode: 'room_link', roomType: roomData?.room?.roomType || 'friends' });
     } catch (nextError) {
       if (nextError?.name !== 'AbortError') setError('分享没有成功，请复制浏览器地址后发给好友。');
     }
+  };
+
+  const enterRoom = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code) onRoomOpen(code);
   };
 
   const completeTask = async () => {
@@ -118,8 +131,9 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
     const nailoongScores = members.map((member) => scoreOf(member, 'nailoong', null)).filter(Number.isFinite);
     const displayedAverage = scoreView === 'jiahao' ? room?.averageScore : nailoongScores.length ? Math.round(nailoongScores.reduce((sum, score) => sum + score, 0) / nailoongScores.length) : '--';
     return <main className="friends-page">
-      <header className="friends-room-head"><div><small>房间码 {roomCode}</small><h1>{room?.name || '好友整活房'}</h1><p>看看今天谁最离谱。</p></div><button type="button" className="primary-button" disabled={!room} onClick={shareRoom}>喊朋友来 <Icon name="share"/></button></header>
+      <header className="friends-room-head"><div><button type="button" className="friends-back" onClick={() => onNavigate('friends')}><Icon name="arrow" size={16}/> 返回好友首页</button><small>房间码 {roomCode}</small><h1>{room?.name || '好友整活房'}</h1><p>{roomData?.isMember ? '你已在房间里，排行会跟着最新成绩更新。' : '加入后才能看到自己的名次。'}</p></div><button type="button" className="primary-button" disabled={!room} onClick={shareRoom}>邀请好友 <Icon name="share"/></button></header>
       {error ? <p className="form-message error" role="alert">{error}</p> : null}
+      {notice ? <p className="form-message info" role="status">{notice}</p> : null}
       {!roomData && !error ? <div className="game-loading">正在同步好友战绩…</div> : null}
       {roomData ? <>
         <div className="score-view-tabs" role="tablist" aria-label="好友榜类型"><button type="button" role="tab" aria-selected={scoreView === 'jiahao'} onClick={() => setScoreView('jiahao')}>嘉豪榜</button><button type="button" role="tab" aria-selected={scoreView === 'nailoong'} onClick={() => setScoreView('nailoong')}>奶龙榜</button></div>
@@ -130,10 +144,18 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
     </main>;
   }
 
-  return <main className="friends-page">
-    <header className="friends-title"><h1>好友豪气榜</h1><p>测完别急着走，把朋友拉进来比一局。</p></header>
+  return <main className="friends-page friends-home">
+    <header className="friends-title"><div><h1>好友豪气榜</h1><p>发起一局，或输入房间码直接加入。</p></div><div className={`friends-score-status ${latestResult ? 'ready' : ''}`}><span>{latestResult ? '成绩已就绪' : '还差一步'}</span><strong>{latestResult ? `${latestResult.score} 嘉豪` : '先完成鉴定'}</strong></div></header>
     {error ? <p className="form-message error" role="alert">{error}</p> : null}
-    <section className="friends-entry-layout"><div className="friends-primary-action"><h2>单挑好友</h2><p>生成一个链接，直接比嘉豪成绩。</p><label>你的昵称<input value={nickname} maxLength={24} onChange={(event) => setNickname(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !latestResult} onClick={() => createRoom('challenge')}>{latestResult ? '生成挑战链接' : '先去鉴定'} <Icon name="arrow"/></button></div><div className="friends-secondary-actions"><article><div><h2>开个整活房</h2><p>每天一个怪任务，朋友一起排行。</p></div><label>房间名<input value={roomName} maxLength={40} onChange={(event) => setRoomName(event.target.value)} /></label><button type="button" className="outline-button" disabled={busy || !latestResult} onClick={() => createRoom('friends')}>创建房间 <Icon name="users"/></button></article><article><div><h2>我有房间码</h2><p>输入朋友发来的码。</p></div><label>房间码<input value={joinCode} maxLength={10} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="例如 JH8F32A" /></label><button type="button" className="outline-button" disabled={!joinCode.trim()} onClick={() => onRoomOpen(joinCode.trim())}>进入房间 <Icon name="arrow"/></button></article></div></section>
+    <section className="friends-entry-console">
+      <div className="friends-entry-tabs" role="tablist" aria-label="选择好友玩法"><button type="button" role="tab" aria-selected={entryMode === 'create'} onClick={() => { setEntryMode('create'); setError(''); }}>发起一局</button><button type="button" role="tab" aria-selected={entryMode === 'join'} onClick={() => { setEntryMode('join'); setError(''); }}>加入房间</button></div>
+      {entryMode === 'create' ? <div className="friends-create-flow">
+        {!latestResult ? <div className="friends-prerequisite"><div><span>创建前需要一份成绩</span><h2>先测一次，再把结果带进好友局</h2><p>完成鉴定后会自动回到这里，原始内容不会公开。</p></div><button type="button" className="primary-button" onClick={startFriendAssessment}>先完成鉴定 <Icon name="arrow"/></button></div> : <>
+          <div className="friends-room-type" role="group" aria-label="选择好友局类型"><button type="button" aria-pressed={roomType === 'challenge'} onClick={() => setRoomType('challenge')}><Icon name="spark"/><span><b>单挑好友</b><small>一条链接，直接比成绩</small></span></button><button type="button" aria-pressed={roomType === 'friends'} onClick={() => setRoomType('friends')}><Icon name="users"/><span><b>整活房</b><small>多人排行，每日有任务</small></span></button></div>
+          <div className="friends-create-fields"><label>你的昵称<input value={nickname} maxLength={24} onChange={(event) => setNickname(event.target.value)} /></label>{roomType === 'friends' ? <label>房间名<input value={roomName} maxLength={40} onChange={(event) => setRoomName(event.target.value)} /></label> : <div className="friends-create-summary"><span>将创建</span><strong>谁更抽象挑战</strong><small>生成后可直接复制邀请链接</small></div>}<button type="button" className="primary-button" disabled={busy || !nickname.trim()} onClick={() => createRoom(roomType)}>{busy ? '正在创建…' : roomType === 'challenge' ? '生成挑战链接' : '创建整活房'} <Icon name="arrow"/></button></div>
+        </>}
+      </div> : <div className="friends-join-flow"><div><span>已有邀请</span><h2>输入房间码</h2><p>还没鉴定也能先进房，系统会引导你完成成绩。</p></div><label htmlFor="friends-room-code">输入好友房间码<input id="friends-room-code" value={joinCode} maxLength={10} autoCapitalize="characters" onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="例如 JH8F32A" /></label><button type="button" className="yellow-button" disabled={!joinCode.trim()} onClick={enterRoom}>进入好友房 <Icon name="arrow"/></button></div>}
+    </section>
     <section className="room-history"><header><h2>我的好友房</h2><span>{session?.rooms?.length || 0} 个</span></header>{session?.rooms?.length ? session.rooms.map((room) => <button type="button" key={room.code} onClick={() => onRoomOpen(room.code)}><span><strong>{room.name}</strong><small>{room.is_owner ? '我创建的' : '已加入'} · {room.member_count} 人</small></span><b>{room.score}<small>嘉豪</small></b><Icon name="arrow"/></button>) : <p>还没有房间记录。完成一次鉴定后，叫朋友来玩。</p>}</section>
   </main>;
 }
