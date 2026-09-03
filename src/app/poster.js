@@ -41,22 +41,30 @@ function drawImageContain(ctx, image, rect) {
   ctx.drawImage(image, rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height);
 }
 
+function drawPortraitFrame(ctx, image, frame, rect) {
+  const frameWidth = image.width / 3;
+  const scale = Math.min(rect.width / frameWidth, rect.height / image.height);
+  const width = frameWidth * scale;
+  const height = image.height * scale;
+  ctx.drawImage(image, frame * frameWidth, 0, frameWidth, image.height, rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height);
+}
+
 export async function createBattleCard(result, shareUrl = window.location.origin) {
   const layout = battleCardLayout();
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1440;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#f5f2e9';
+  ctx.fillStyle = '#f6f3ec';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = '#11110f';
   ctx.lineWidth = 3;
   ctx.strokeRect(42, 42, 996, 1356);
   ctx.fillStyle = '#11110f';
   ctx.font = '900 58px Arial, sans-serif';
-  ctx.fillText('嘉豪鉴定所', 72, 120);
+  ctx.fillText('豪气宇宙', 72, 120);
   ctx.font = '700 24px Arial, sans-serif';
-  ctx.fillText('双指数战绩 / 仅供娱乐', 74, 164);
+  ctx.fillText('嘉豪战绩 / 仅供娱乐', 74, 164);
   ctx.fillRect(72, 196, 940, 4);
 
   ctx.fillStyle = '#0b56f0';
@@ -64,31 +72,28 @@ export async function createBattleCard(result, shareUrl = window.location.origin
   ctx.fillStyle = '#f5f2e9';
   ctx.fillRect(layout.hero.x + 4, layout.hero.y + 4, layout.hero.width - 8, layout.hero.height - 8);
 
-  const mascot = await loadImage('/assets/nailoong/arms.webp').catch(() => null);
-  if (mascot) drawImageContain(ctx, mascot, { x: layout.hero.x + 8, y: layout.hero.y + 16, width: layout.hero.width - 16, height: layout.hero.height - 24 });
+  const score = result.jiahao?.score ?? result.score;
+  const portraitVariant = Math.abs(Number(score) || 0) % 6;
+  const portraitSheet = await loadImage(portraitVariant < 3 ? '/assets/jiahao-species-labs.png' : '/assets/jiahao-species-blue.png').catch(() => null);
+  if (portraitSheet) drawPortraitFrame(ctx, portraitSheet, portraitVariant % 3, { x: layout.hero.x + 8, y: layout.hero.y + 16, width: layout.hero.width - 16, height: layout.hero.height - 24 });
   ctx.fillStyle = '#11110f';
   ctx.font = '800 28px Arial, sans-serif';
   ctx.fillText('嘉豪指数', layout.scores.x, layout.scores.y + 24);
   ctx.fillStyle = '#0b56f0';
   ctx.font = '900 158px Arial, sans-serif';
-  ctx.fillText(String(result.jiahao?.score ?? result.score).padStart(2, '0'), layout.scores.x - 8, layout.scores.y + 166);
+  ctx.fillText(String(score).padStart(2, '0'), layout.scores.x - 8, layout.scores.y + 166);
   ctx.fillStyle = '#11110f';
   ctx.fillRect(layout.scores.x, layout.scores.y + 190, layout.scores.width, 3);
-  ctx.font = '800 28px Arial, sans-serif';
-  ctx.fillText('奶龙指数', layout.scores.x, layout.scores.y + 245);
-  ctx.fillStyle = '#efca16';
-  ctx.font = '900 158px Arial, sans-serif';
-  ctx.fillText(String(result.nailoong?.score ?? 0).padStart(2, '0'), layout.scores.x - 8, layout.scores.y + 386);
-  ctx.fillStyle = '#11110f';
-  ctx.fillRect(layout.scores.x, layout.scores.y + 410, layout.scores.width, 3);
+  ctx.font = '700 24px Arial, sans-serif';
+  ctx.fillText('一份只讲嘉豪的鉴定', layout.scores.x, layout.scores.y + 242);
 
   ctx.fillStyle = '#efca16';
   ctx.fillRect(layout.verdict.x, layout.verdict.y, layout.verdict.width, 82);
   ctx.fillStyle = '#11110f';
   ctx.font = '900 36px Arial, sans-serif';
-  wrap(ctx, result.nailoong?.archetype || '淡人型奶龙豪', layout.verdict.x + 18, layout.verdict.y + 53, layout.verdict.width - 36, 42, 2);
+  wrap(ctx, result.jiahao?.type || result.type || '自在极意豪', layout.verdict.x + 18, layout.verdict.y + 53, layout.verdict.width - 36, 42, 2);
   ctx.font = '800 29px Arial, sans-serif';
-  wrap(ctx, result.nailoong?.verdict || result.verdict, layout.verdict.x + 18, layout.verdict.y + 130, layout.verdict.width - 36, 44, 5);
+  wrap(ctx, result.verdict || result.comment, layout.verdict.x + 18, layout.verdict.y + 130, layout.verdict.width - 36, 44, 5);
 
   ctx.fillStyle = '#11110f';
   ctx.fillRect(72, 1128, 940, 3);
@@ -96,9 +101,9 @@ export async function createBattleCard(result, shareUrl = window.location.origin
   ctx.drawImage(qr, layout.qr.x, layout.qr.y, layout.qr.width, layout.qr.height);
   ctx.fillStyle = '#11110f';
   ctx.font = '900 32px Arial, sans-serif';
-  ctx.fillText('扫码来对线', 284, 1244);
+  ctx.fillText('扫码来测', 284, 1244);
   ctx.font = '600 23px Arial, sans-serif';
-  ctx.fillText('测测你有多豪，又有多奶。', 284, 1286);
+  ctx.fillText('测测你有多豪。', 284, 1286);
   ctx.fillStyle = '#68675f';
   ctx.font = '500 19px Arial, sans-serif';
   ctx.fillText('原始素材不入卡，仅展示娱乐结果。', 284, 1330);

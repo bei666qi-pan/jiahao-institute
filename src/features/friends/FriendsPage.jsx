@@ -6,6 +6,7 @@ import { trackProductEvent } from '../../telemetry';
 
 function scoreOf(member, field, fallback = '--') {
   const value = field === 'jiahao' ? member.score : member.nailoong?.score ?? member.nailoongScore;
+  if (value === null || value === undefined || value === '') return fallback;
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
 
@@ -15,6 +16,7 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
   const [nickname, setNickname] = useState(() => localStorage.getItem('jiahao-nickname') || '奶龙本人');
   const [roomName, setRoomName] = useState('好友抽象战绩房');
   const [joinCode, setJoinCode] = useState('');
+  const [scoreView, setScoreView] = useState('jiahao');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const autoJoinRef = useRef(false);
@@ -113,22 +115,25 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
   if (roomCode) {
     const room = roomData?.room;
     const members = roomData?.members || [];
+    const nailoongScores = members.map((member) => scoreOf(member, 'nailoong', null)).filter(Number.isFinite);
+    const displayedAverage = scoreView === 'jiahao' ? room?.averageScore : nailoongScores.length ? Math.round(nailoongScores.reduce((sum, score) => sum + score, 0) / nailoongScores.length) : '--';
     return <main className="friends-page">
       <header className="friends-room-head"><div><small>房间码 {roomCode}</small><h1>{room?.name || '好友整活房'}</h1><p>看看今天谁最离谱。</p></div><button type="button" className="primary-button" disabled={!room} onClick={shareRoom}>喊朋友来 <Icon name="share"/></button></header>
       {error ? <p className="form-message error" role="alert">{error}</p> : null}
       {!roomData && !error ? <div className="game-loading">正在同步好友战绩…</div> : null}
       {roomData ? <>
-        <section className="room-metrics"><div><span>平均嘉豪</span><strong>{room.averageScore}</strong></div><div><span>参与人数</span><strong>{room.memberCount}<small> / {room.memberLimit}</small></strong></div><div><span>我的名次</span><strong>{members.find((member) => member.isSelf)?.rank || '--'}</strong></div></section>
+        <div className="score-view-tabs" role="tablist" aria-label="好友榜类型"><button type="button" role="tab" aria-selected={scoreView === 'jiahao'} onClick={() => setScoreView('jiahao')}>嘉豪榜</button><button type="button" role="tab" aria-selected={scoreView === 'nailoong'} onClick={() => setScoreView('nailoong')}>奶龙榜</button></div>
+        <section className="room-metrics"><div><span>{scoreView === 'jiahao' ? '平均嘉豪' : '平均奶龙'}</span><strong>{displayedAverage}</strong></div><div><span>参与人数</span><strong>{room.memberCount}<small> / {room.memberLimit}</small></strong></div><div><span>我的名次</span><strong>{members.find((member) => member.isSelf)?.rank || '--'}</strong></div></section>
         {!roomData.isMember && !room.isExpired ? <section className="join-room-strip"><div><strong>加入后查看你的名次</strong><p>只公开昵称和成绩。</p></div><input aria-label="好友房昵称" maxLength={24} value={nickname} onChange={(event) => setNickname(event.target.value)} /><button type="button" className="yellow-button" disabled={busy} onClick={latestResult ? () => joinRoom() : startInvitedAssessment}>{latestResult ? '带成绩加入' : '先去鉴定'}</button></section> : null}
-        <section className="room-content"><div className="leaderboard"><header><strong>好友战绩</strong><span>本周排行</span></header>{members.map((member) => <article key={member.memberId} className={member.isSelf ? 'self' : ''}><b>{String(member.rank).padStart(2, '0')}</b><span className="avatar">{member.nickname?.slice(0, 1) || '豪'}</span><div><strong>{member.nickname}{member.isSelf ? ' · 我' : ''}</strong><small>{member.nailoong?.archetype || member.type}</small></div><span><b>{member.seasonPoints || 0}</b><small>积分</small></span><span><b>{scoreOf(member, 'jiahao')}</b><small>嘉豪</small></span><span><b>{scoreOf(member, 'nailoong')}</b><small>奶龙</small></span></article>)}</div><aside className="room-task"><small>今日任务</small><h2>{roomData.dailyTask?.title || '用一句话证明你嘴硬'}</h2><p>完成得 3 分，每天一次。</p><button type="button" className="primary-button" disabled={busy || !roomData.isMember || roomData.todayTaskCompleted} onClick={completeTask}>{roomData.todayTaskCompleted ? '今天玩过了' : '完成任务'}</button><p className="privacy-line"><Icon name="lock" size={15}/> 原始素材不会公开。</p></aside></section>
+        <section className="room-content"><div className="leaderboard"><header><strong>{scoreView === 'jiahao' ? '嘉豪榜' : '奶龙榜'}</strong><span>本周排行</span></header>{members.map((member) => <article key={member.memberId} className={member.isSelf ? 'self' : ''}><b>{String(member.rank).padStart(2, '0')}</b><span className="avatar">{member.nickname?.slice(0, 1) || '豪'}</span><div><strong>{member.nickname}{member.isSelf ? '（我）' : ''}</strong><small>{scoreView === 'jiahao' ? member.type : member.nailoong?.archetype}</small></div><span><b>{member.seasonPoints || 0}</b><small>积分</small></span><span><b>{scoreOf(member, scoreView)}</b><small>{scoreView === 'jiahao' ? '嘉豪' : '奶龙'}</small></span></article>)}</div><aside className="room-task"><small>今日任务</small><h2>{roomData.dailyTask?.title || '用一句话证明你嘴硬'}</h2><p>完成得 3 分，每天一次。</p><button type="button" className="primary-button" disabled={busy || !roomData.isMember || roomData.todayTaskCompleted} onClick={completeTask}>{roomData.todayTaskCompleted ? '今天玩过了' : '完成任务'}</button><p className="privacy-line"><Icon name="lock" size={15}/> 原始素材不会公开。</p></aside></section>
       </> : null}
     </main>;
   }
 
   return <main className="friends-page">
-    <header className="friends-title"><h1>好友战绩</h1><p>测完别急着走，把朋友拉进来比一比。</p></header>
+    <header className="friends-title"><h1>好友豪气榜</h1><p>测完别急着走，把朋友拉进来比一局。</p></header>
     {error ? <p className="form-message error" role="alert">{error}</p> : null}
-    <section className="friends-create-grid"><div><h2>单挑好友</h2><p>发个链接，自动比双指数。</p><label>你的昵称<input value={nickname} maxLength={24} onChange={(event) => setNickname(event.target.value)} /></label><button type="button" className="yellow-button" disabled={busy || !latestResult} onClick={() => createRoom('challenge')}>{latestResult ? '生成挑战链接' : '先去鉴定'} <Icon name="arrow"/></button></div><div><h2>开个整活房</h2><p>每天一个怪任务，朋友一起排行。</p><label>房间名<input value={roomName} maxLength={40} onChange={(event) => setRoomName(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !latestResult} onClick={() => createRoom('friends')}>创建房间 <Icon name="users"/></button></div><div><h2>我有房间码</h2><p>输入朋友发来的码。</p><label>房间码<input value={joinCode} maxLength={10} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="例如 JH8F32A" /></label><button type="button" className="outline-button" disabled={!joinCode.trim()} onClick={() => onRoomOpen(joinCode.trim())}>进入房间 <Icon name="arrow"/></button></div></section>
+    <section className="friends-entry-layout"><div className="friends-primary-action"><h2>单挑好友</h2><p>生成一个链接，直接比嘉豪成绩。</p><label>你的昵称<input value={nickname} maxLength={24} onChange={(event) => setNickname(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !latestResult} onClick={() => createRoom('challenge')}>{latestResult ? '生成挑战链接' : '先去鉴定'} <Icon name="arrow"/></button></div><div className="friends-secondary-actions"><article><div><h2>开个整活房</h2><p>每天一个怪任务，朋友一起排行。</p></div><label>房间名<input value={roomName} maxLength={40} onChange={(event) => setRoomName(event.target.value)} /></label><button type="button" className="outline-button" disabled={busy || !latestResult} onClick={() => createRoom('friends')}>创建房间 <Icon name="users"/></button></article><article><div><h2>我有房间码</h2><p>输入朋友发来的码。</p></div><label>房间码<input value={joinCode} maxLength={10} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="例如 JH8F32A" /></label><button type="button" className="outline-button" disabled={!joinCode.trim()} onClick={() => onRoomOpen(joinCode.trim())}>进入房间 <Icon name="arrow"/></button></article></div></section>
     <section className="room-history"><header><h2>我的好友房</h2><span>{session?.rooms?.length || 0} 个</span></header>{session?.rooms?.length ? session.rooms.map((room) => <button type="button" key={room.code} onClick={() => onRoomOpen(room.code)}><span><strong>{room.name}</strong><small>{room.is_owner ? '我创建的' : '已加入'} · {room.member_count} 人</small></span><b>{room.score}<small>嘉豪</small></b><Icon name="arrow"/></button>) : <p>还没有房间记录。完成一次鉴定后，叫朋友来玩。</p>}</section>
   </main>;
 }

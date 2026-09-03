@@ -61,10 +61,13 @@ async function openSection(page, desktopName, mobileName = desktopName) {
 }
 
 async function completeTextAssessment(page, text = '也没什么，只是习惯一个人处理。', { expectResult = true } = {}) {
+  if (await page.getByRole('heading', { name: '这里是豪气宇宙' }).isVisible().catch(() => false)) {
+    await page.getByRole('button', { name: /测测我有多豪/ }).click();
+  }
   await page.getByRole('tab', { name: '文字' }).click();
   await page.getByLabel('要鉴定的文字').fill(text);
   await page.getByLabel('同意将内容用于本次娱乐分析').check();
-  await page.getByRole('button', { name: /开始抽象鉴定/ }).click();
+  await page.getByRole('button', { name: /开始鉴定/ }).click();
   if (expectResult) await expect(page.getByRole('heading', { name: '鉴定结果' })).toBeVisible();
 }
 
@@ -75,26 +78,28 @@ test.describe('嘉豪鉴定所升级全链路', () => {
   });
 
   test('五模块导航与人格档案是正式页面', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: '先别急着装正常。' })).toBeVisible();
-    await openSection(page, '我的档案');
+    await expect(page.getByRole('heading', { name: '这里是豪气宇宙' })).toBeVisible();
+    await openSection(page, '人格档案', '我的');
     await expect(page.getByRole('heading', { name: '人格档案' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '嘉豪物种' })).toBeVisible();
     await page.getByRole('tab', { name: '奶龙人格' }).click();
     await expect(page.getByRole('heading', { name: '淡人型奶龙豪' }).first()).toBeVisible();
   });
 
-  test('照片、聊天和文字三种鉴定都进入双指数结果', async ({ page }) => {
+  test('照片、聊天和文字三种鉴定都进入嘉豪结果', async ({ page }) => {
+    await openSection(page, '嘉豪鉴定', '鉴定');
     await page.locator('input[type="file"]').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('fake-image') });
     await page.getByLabel('同意将内容用于本次娱乐分析').check();
-    await page.getByRole('button', { name: /开始抽象鉴定/ }).click();
-    await expect(page.getByText('奶龙指数')).toBeVisible();
+    await page.getByRole('button', { name: /开始鉴定/ }).click();
+    await expect(page.locator('.result-score').getByText('嘉豪指数')).toBeVisible();
+    await expect(page.getByText('奶龙指数')).toHaveCount(0);
 
     await page.getByRole('button', { name: '再测一次' }).first().click();
     await page.getByRole('tab', { name: '聊天记录' }).click();
     await page.locator('input[type="file"]').setInputFiles({ name: 'chat.txt', mimeType: 'text/plain', buffer: Buffer.from('roommate: fine') });
     await page.getByLabel('同意将内容用于本次娱乐分析').check();
-    await page.getByRole('button', { name: /开始抽象鉴定/ }).click();
-    await expect(page.getByRole('heading', { name: '淡人型奶龙豪' }).first()).toBeVisible();
+    await page.getByRole('button', { name: /开始鉴定/ }).click();
+    await expect(page.getByRole('heading', { name: '自在极意豪' }).first()).toBeVisible();
 
     await page.getByRole('button', { name: '再测一次' }).first().click();
     await completeTextAssessment(page);
@@ -106,18 +111,19 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '云端忙' }) }));
     await completeTextAssessment(page, '这个底层逻辑其实不复杂，懂的都懂。');
     await expect(page.getByText(/基础成绩/)).toBeVisible();
-    await openSection(page, '我的档案');
+    await openSection(page, '人格档案', '我的');
     await expect(page.locator('.history-grid button')).toHaveCount(1);
   });
 
-  test('抽象法庭与嘴硬翻译器形成可完成闭环', async ({ page }) => {
+  test('嘉豪语录与奶龙法庭分处各自玩法入口', async ({ page }) => {
+    await page.getByRole('button', { name: '一键说人话' }).click();
+    await page.getByRole('button', { name: /一键把嘉豪说人话/ }).click();
+    await expect(page.getByText('不是累，只是在和世界保持合理距离。')).toBeVisible();
     await openSection(page, '抽象实验室', '实验室');
-    await page.getByRole('button', { name: /抽象法庭/ }).click();
+    await expect(page.getByRole('heading', { name: '奶龙实验室' })).toBeVisible();
+    await page.getByRole('button', { name: /奶龙抽象法庭/ }).click();
     await page.getByRole('button', { name: '立即开庭' }).click();
     await expect(page.getByText('被告胜诉')).toBeVisible();
-    await page.getByRole('button', { name: /嘴硬翻译器/ }).click();
-    await page.getByRole('button', { name: '开始嘴硬' }).click();
-    await expect(page.getByText('不是累，只是在和世界保持合理距离。')).toBeVisible();
   });
 
   test('完成鉴定后可创建挑战并落到正式好友榜页面', async ({ page }) => {
@@ -125,8 +131,8 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await page.getByRole('button', { name: /拉好友来测/ }).click();
     await expect(page).toHaveURL(/\/r\/JH8F32A$/);
     await expect(page.getByRole('heading', { name: '谁更抽象挑战' })).toBeVisible();
-    await expect(page.getByText('奶龙本人 · 我')).toBeVisible();
-    await expect(page.getByText('淡人型奶龙豪')).toBeVisible();
+    await expect(page.getByText('奶龙本人（我）')).toBeVisible();
+    await expect(page.getByText('自在极意豪')).toBeVisible();
   });
 
   test('未鉴定好友打开邀请后可先测并自动回房加入', async ({ page }) => {
@@ -152,14 +158,14 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await assessFirst.click();
     await completeTextAssessment(page, '好友打开邀请后直接完成鉴定。', { expectResult: false });
     await expect(page).toHaveURL(/\/r\/JH8F32A$/);
-    await expect(page.getByText('奶龙本人 · 我')).toBeVisible();
+    await expect(page.getByText('奶龙本人（我）')).toBeVisible();
   });
 
   test('390×844下首页、实验室和好友页均无横向溢出', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
     await expect(page.getByRole('navigation', { name: '移动端主导航' }).getByRole('button')).toHaveCount(5);
-    for (const [desktop, mobile] of [['鉴定', '鉴定'], ['抽象实验室', '实验室'], ['好友战绩', '好友']]) {
+    for (const [desktop, mobile] of [['嘉豪鉴定', '鉴定'], ['抽象实验室', '实验室'], ['好友豪气榜', '好友']]) {
       await openSection(page, desktop, mobile);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);
     }

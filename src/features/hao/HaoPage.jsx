@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
 import { JiahaoPortrait } from '../../components/JiahaoPortrait';
@@ -20,8 +20,7 @@ function fallbackQuote(input, mode, level, style) {
   return `${sentence}。${endings[level]}${style === '小众' ? ' 这种感觉本来就不是给所有人理解的。' : ''}`;
 }
 
-function HaoQuoteStudio() {
-  const [open, setOpen] = useState(false);
+function HaoQuoteStudio({ inputRef }) {
   const [input, setInput] = useState('今天有点累。');
   const [mode, setMode] = useState('hao');
   const [level, setLevel] = useState('豪气冲天');
@@ -57,11 +56,16 @@ function HaoQuoteStudio() {
     canvas.width = 1080;
     canvas.height = 1440;
     const context = canvas.getContext('2d');
-    context.fillStyle = '#efca16';
+    context.fillStyle = '#f7f4ee';
     context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#145bea';
+    context.fillRect(0, 0, 1080, 22);
     context.fillStyle = '#11110f';
     context.font = '900 54px "PingFang SC", sans-serif';
-    context.fillText('嘉豪鉴定所', 84, 112);
+    context.fillText('豪气宇宙', 84, 112);
+    context.fillStyle = '#f2c51d';
+    context.fillRect(84, 176, 154, 16);
+    context.fillStyle = '#11110f';
     context.font = '900 86px "PingFang SC", sans-serif';
     const chars = [...result.output];
     const lines = [];
@@ -73,31 +77,35 @@ function HaoQuoteStudio() {
     }
     if (line) lines.push(line);
     lines.slice(0, 8).forEach((item, index) => context.fillText(item, 84, 360 + index * 118));
+    context.strokeStyle = 'rgba(17,17,15,.25)';
+    context.beginPath();
+    context.moveTo(84, 1264);
+    context.lineTo(996, 1264);
+    context.stroke();
+    context.fillStyle = '#625f57';
     context.font = '700 34px "PingFang SC", sans-serif';
-    context.fillText('豪气仅供娱乐，转发才有意义。', 84, 1340);
+    context.fillText('一句话豪化 · 结果仅供娱乐', 84, 1340);
     const link = document.createElement('a');
     link.download = '嘉豪语录卡.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
 
-  return <section className={`hao-panel ${open ? 'open' : ''}`}>
-    <button type="button" className="hao-panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><div><strong>嘉豪语录</strong><small>把一句普通话，变得很有故事</small></div><Icon name="spark"/></button>
-    {open ? <div className="hao-quote-body">
+  return <section className="hao-quote-studio" id="hao-quote-studio">
+    <header className="section-heading"><h2>把一句话豪化</h2><p>输入一句普通话，看看嘉豪会怎么说。</p></header>
+    <div className="hao-quote-body">
       <div className="hao-quote-controls">
-        <label htmlFor="hao-quote-input">要豪化的原句</label><textarea id="hao-quote-input" maxLength={300} value={input} onChange={(event) => setInput(event.target.value)}/>
+        <label htmlFor="hao-quote-input">要豪化的原句</label><textarea ref={inputRef} id="hao-quote-input" maxLength={300} value={input} onChange={(event) => setInput(event.target.value)}/>
         <div className="hao-switch" role="group" aria-label="转换方向"><button type="button" aria-pressed={mode === 'hao'} onClick={() => setMode('hao')}>豪化</button><button type="button" aria-pressed={mode === 'dehao'} onClick={() => setMode('dehao')}>一键说人话</button></div>
-        <fieldset disabled={mode === 'dehao'}><legend>豪气等级</legend><div className="hao-option-grid levels">{QUOTE_LEVELS.map((item) => <button type="button" key={item} aria-pressed={level === item} onClick={() => setLevel(item)}>{item}</button>)}</div></fieldset>
-        <fieldset disabled={mode === 'dehao'}><legend>表达风格</legend><div className="hao-option-grid styles">{QUOTE_STYLES.map((item) => <button type="button" key={item} aria-pressed={style === item} onClick={() => setStyle(item)}>{item}</button>)}</div></fieldset>
+        <details className="hao-advanced"><summary>调整豪气风格</summary><fieldset disabled={mode === 'dehao'}><legend>豪气等级</legend><div className="hao-option-grid levels">{QUOTE_LEVELS.map((item) => <button type="button" key={item} aria-pressed={level === item} onClick={() => setLevel(item)}>{item}</button>)}</div></fieldset><fieldset disabled={mode === 'dehao'}><legend>表达风格</legend><div className="hao-option-grid styles">{QUOTE_STYLES.map((item) => <button type="button" key={item} aria-pressed={style === item} onClick={() => setStyle(item)}>{item}</button>)}</div></fieldset></details>
         <button type="button" className="primary-button" disabled={busy || input.trim().length < 2} onClick={generate}>{busy ? '豪气正在汇聚…' : mode === 'dehao' ? '一键把嘉豪说人话' : '生成嘉豪语录'} <Icon name="arrow"/></button>
       </div>
-      <div className="hao-quote-output">{result ? <><span>这句很豪</span><blockquote>{result.output}</blockquote>{result.fallback ? <p className="hao-fallback-note">这次用了备用玩法，结果仅供娱乐。</p> : null}<div className="hao-output-actions"><button type="button" className="outline-button" onClick={copy}><Icon name="copy" size={17}/>复制</button><button type="button" className="outline-button" onClick={download}><Icon name="download" size={17}/>保存语录卡</button></div>{notice ? <p role="status">{notice}</p> : null}</> : <strong>放一句普通话进来，<br/>看它能有多豪。</strong>}</div>
-    </div> : null}
+      <div className="hao-quote-output">{result ? <><span>这句很豪</span><blockquote>{result.output}</blockquote><p className="hao-fallback-note">{result.fallback ? '这次用了备用玩法，结果仅供娱乐。' : '这句话由 AI 生成，请当作娱乐灵感。'}</p><div className="hao-output-actions"><button type="button" className="outline-button" onClick={copy}><Icon name="copy" size={17}/>复制</button><button type="button" className="outline-button" onClick={download}><Icon name="download" size={17}/>保存语录卡</button></div>{notice ? <p role="status">{notice}</p> : null}</> : <strong>放一句普通话进来，<br/>看它能有多豪。</strong>}</div>
+    </div>
   </section>;
 }
 
-function HaoPkArena() {
-  const [open, setOpen] = useState(false);
+function HaoPkArena({ open, onToggle }) {
   const [first, setFirst] = useState('我一般不解释，懂的都懂。');
   const [second, setSecond] = useState('这波回调只是长期价值的必经之路。');
   const [consent, setConsent] = useState(false);
@@ -123,16 +131,23 @@ function HaoPkArena() {
   };
 
   return <section className={`hao-panel ${open ? 'open' : ''}`}>
-    <button type="button" className="hao-panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><div><strong>双人豪气 PK</strong><small>放两句话进来，看谁更豪</small></div><Icon name="sword"/></button>
+    <button type="button" className="hao-panel-heading" onClick={onToggle} aria-expanded={open}><div><strong>双人豪气 PK</strong><small>双方各出一句话，看看谁更豪</small></div><Icon name="sword"/></button>
     {open ? <div className="hao-pk-body"><div className="hao-pk-inputs"><label>甲方豪气样本<textarea value={first} onChange={(event) => setFirst(event.target.value)}/></label><b>VS</b><label>乙方豪气样本<textarea value={second} onChange={(event) => setSecond(event.target.value)}/></label></div><label className="consent-row"><input aria-label="确认双方素材授权" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)}/><span>我确认有权使用双方文字。</span></label>{error ? <p className="form-message error" role="alert">{error}</p> : null}<button type="button" className="primary-button hao-pk-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={start}>{busy ? '正在判…' : '开始豪气 PK'} <Icon name="sword"/></button>{result ? <div className="hao-pk-result"><small>本局结果</small><h3>{result.battle.title}</h3><p>{result.battle.reason}</p><div>{result.participants.map((item, index) => <span key={`${item.name}-${index}`}><b>{item.name || (index ? '乙方' : '甲方')}</b><strong>{item.score}</strong><em>{item.type}</em></span>)}</div>{result.fallback ? <small>这次用了备用玩法，结果仅供娱乐。</small> : null}</div> : null}</div> : null}
   </section>;
 }
 
 export function HaoPage({ onNavigate }) {
+  const [pkOpen, setPkOpen] = useState(false);
+  const quoteInputRef = useRef(null);
+  const focusQuote = () => {
+    document.getElementById('hao-quote-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => quoteInputRef.current?.focus(), 320);
+  };
+
   return <main className="hao-page">
-    <header className="hao-hero"><div><h1>你有多豪？</h1><p>放张照片或一句话进来，看看豪气藏得有多深。</p><button type="button" className="yellow-button" onClick={() => onNavigate('assay')}>测测我有多豪 <Icon name="arrow"/></button></div><JiahaoPortrait variant={4} label="戴墨镜穿夹克的嘉豪" className="hao-hero-portrait"/></header>
-    <HaoQuoteStudio/>
-    <HaoPkArena/>
-    <section className="hao-panel hao-archive-entry"><div className="hao-panel-heading static"><div><strong>嘉豪出没图鉴</strong><small>六种高频状态，全员有脸</small></div><Icon name="archive"/></div><div className="hao-entry-body"><p>口罩豪、股票豪、计算机豪，你是哪一种？</p><button type="button" className="yellow-button" onClick={() => onNavigate('archive')}>去翻图鉴 <Icon name="arrow"/></button></div></section>
+    <header className="hao-hero"><div className="hao-hero-copy"><h1 aria-label="这里是豪气宇宙"><span>这里是</span><span>豪气宇宙</span></h1><p>测一测，改句话，和朋友比一局。好玩就行，不用当真。</p><div className="hero-actions"><button type="button" className="primary-button" onClick={() => onNavigate('assay')}>测测我有多豪 <Icon name="arrow"/></button><button type="button" className="outline-button" onClick={focusQuote}>把一句话豪化 <Icon name="text"/></button></div></div><figure className="hao-hero-media"><img src="/assets/jiahao/hao-universe-hero.webp" alt="巷子里笑得很开心的嘉豪" width="960" height="1200" fetchPriority="high"/><figcaption>豪气是一种生活态度。</figcaption></figure></header>
+    <HaoQuoteStudio inputRef={quoteInputRef}/>
+    <section className="hao-play-rail"><article><div><h2>和好友比一局</h2><p>双方各出一句话，看看谁更豪。</p></div><button type="button" className="outline-button" onClick={() => setPkOpen((value) => !value)} aria-expanded={pkOpen}>{pkOpen ? '收起 PK' : '双人豪气 PK'} <Icon name="arrow"/></button></article><article className="hao-archive-door"><JiahaoPortrait variant={2} label="经典嘉豪人物图鉴预览" className="hao-archive-preview"/><div><h2>嘉豪出没图鉴</h2><p>六种嘉豪状态，原来的经典人物都在。</p></div><button type="button" className="outline-button" onClick={() => onNavigate('archive')}>去看图鉴 <Icon name="arrow"/></button></article></section>
+    <HaoPkArena open={pkOpen} onToggle={() => setPkOpen((value) => !value)}/>
   </main>;
 }
