@@ -2,16 +2,17 @@ import { useEffect, useState } from 'react';
 import { createBattleCard, downloadDataUrl } from '../../app/poster';
 import { postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
+import { JiahaoPortrait } from '../../components/JiahaoPortrait';
 import { makeSocialResultPayload } from '../../validation';
 import { trackProductEvent } from '../../telemetry';
 
-const NAILOONG_DIMENSIONS = [
-  ['hardMouth', '嘴硬'],
-  ['deadpan', '呆愣'],
-  ['hungerResilience', '逆风扛饿'],
-  ['abstractReaction', '抽象反应'],
-  ['cameraSense', '镜头感'],
-  ['friendPrank', '朋友迫害欲'],
+const JIAHAO_DIMENSIONS = [
+  ['mystery', '神秘感'],
+  ['flex', '松弛力'],
+  ['niche', '小众度'],
+  ['deep', '深情值'],
+  ['show', '表现力'],
+  ['language', '豪言力'],
 ];
 
 export function ResultPage({ result, onReset, onNavigate, onRoomOpen }) {
@@ -20,7 +21,8 @@ export function ResultPage({ result, onReset, onNavigate, onRoomOpen }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const jiahao = result.jiahao || result;
-  const nailoong = result.nailoong;
+  const resultType = jiahao.type || result.type;
+  const verdict = result.verdict || result.comment;
 
   useEffect(() => {
     if (!poster) return undefined;
@@ -78,36 +80,36 @@ export function ResultPage({ result, onReset, onNavigate, onRoomOpen }) {
   const sharePoster = async () => {
     if (!poster) return;
     const blob = await (await fetch(poster)).blob();
-    const file = new File([blob], '嘉豪双指数战绩卡.png', { type: 'image/png' });
+    const file = new File([blob], '嘉豪战绩卡.png', { type: 'image/png' });
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ title: '我的嘉豪双指数', text: `嘉豪 ${jiahao.score}，奶龙 ${nailoong.score}。你敢来测吗？`, url: posterUrl, files: [file] });
+      await navigator.share({ title: '我的嘉豪鉴定', text: `我的嘉豪指数是 ${jiahao.score}。你敢来测吗？`, url: posterUrl, files: [file] });
       return;
     }
-    downloadDataUrl(poster, `嘉豪战绩-${jiahao.score}-${nailoong.score}.png`);
+    downloadDataUrl(poster, `嘉豪战绩-${jiahao.score}.png`);
     if (navigator.clipboard && posterUrl) await navigator.clipboard.writeText(posterUrl).catch(() => {});
     setNotice('战绩卡已下载，挑战链接也已复制。');
   };
 
   return <main className="result-v2-page">
     <header className="result-title-row"><h1>鉴定结果</h1><button type="button" className="outline-button" onClick={onReset}>再测一次 <Icon name="reset" size={18}/></button></header>
-    {result.fallbackNotice ? <p className="source-notice">这次没连上，先给你一个基础成绩。</p> : null}
+    <p className="source-notice">{result.fallbackNotice ? '这次没连上，先给你一个基础成绩。' : '本次结论由 AI 生成，仅供娱乐，不代表真实评价。'}</p>
     <section className="result-layout">
       <div className="verdict-sheet">
-        <div className="score-duel"><div><span>嘉豪指数</span><strong className="blue">{jiahao.score}</strong></div><em>VS</em><div><span>奶龙指数</span><strong className="yellow">{nailoong.score}</strong></div></div>
-        <div className="verdict-copy"><small>鉴定结果</small><h2>{nailoong.archetype}</h2><p>{nailoong.verdict || result.verdict}</p></div>
+        <div className="result-score"><span>嘉豪指数</span><strong>{jiahao.score}</strong></div>
+        <div className="verdict-copy"><span>你的豪气类型</span><h2>{resultType}</h2><p>{verdict}</p></div>
       </div>
       <div className="result-analysis">
-        <div className="result-mascot"><img src="/assets/nailoong/arms.webp" alt="抱臂站立的抽象奶蛙"/><span>奶味逼人<br/>心态超稳</span></div>
-        <div className="dimension-bars" aria-label="六维奶龙成分">
-          {NAILOONG_DIMENSIONS.map(([key, label]) => <div key={key}><span>{label}</span><i><b style={{ width: `${nailoong.dimensions[key]}%` }}/></i><strong>{nailoong.dimensions[key]}</strong></div>)}
+        <JiahaoPortrait variant={jiahao.score} label={`${resultType}的嘉豪人物状态`} className="result-jiahao-portrait"/>
+        <div className="dimension-values" aria-label="六维豪气力">
+          {JIAHAO_DIMENSIONS.map(([key, label]) => <div key={key}><span>{label}</span><strong>{jiahao.dimensions?.[key] ?? result.dimensions?.[key] ?? '--'}</strong></div>)}
         </div>
         <div className="evidence-paper"><h3>你暴露了这三件事</h3><ol>{(result.evidence || []).slice(0, 3).map((item, index) => <li key={`${item}-${index}`}><span>0{index + 1}</span>{item}</li>)}</ol></div>
       </div>
-      <aside className="share-card-preview" aria-label="战绩卡预览"><span>分享战绩卡</span><div><header>嘉豪鉴定所</header><div className="mini-scores"><b>{jiahao.score}<small>嘉豪</small></b><b>{nailoong.score}<small>奶龙</small></b></div><h3>{nailoong.archetype}</h3><img src="/assets/nailoong/arms.webp" alt=""/><p>{nailoong.verdict}</p></div></aside>
+      <aside className="share-card-preview" aria-label="战绩卡预览"><span>战绩卡预览</span><div><header>豪气宇宙</header><div className="mini-scores"><b>{jiahao.score}<small>嘉豪指数</small></b></div><h3>{resultType}</h3><JiahaoPortrait variant={jiahao.score} label="战绩卡中的嘉豪人物"/><p>{verdict}</p></div></aside>
     </section>
     {notice ? <p className="form-message info" role="status">{notice}</p> : null}
     <div className="result-ctas"><button type="button" className="primary-button" disabled={busy} onClick={generatePoster}><Icon name="archive"/> {busy ? '正在生成…' : '生成战绩卡'}</button><button type="button" className="yellow-button" disabled={busy} onClick={createChallenge}><Icon name="users"/> 拉好友来测</button><button type="button" className="outline-button" onClick={onReset}><Icon name="reset"/> 再测一次</button></div>
-    <section className="next-play"><strong>不服？那就来场真正的较量！</strong><button type="button" onClick={() => onNavigate('lab')}>去奶龙反应局翻盘 <Icon name="arrow"/></button><button type="button" onClick={() => onNavigate('friends')}>发起好友整活房 <Icon name="arrow"/></button></section>
-    {poster ? <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPoster('')}><section className="poster-dialog" role="dialog" aria-modal="true" aria-label="双指数战绩卡"><button type="button" autoFocus className="dialog-close" aria-label="关闭战绩卡" onClick={() => setPoster('')}><Icon name="close"/></button><img src={poster} alt={`嘉豪指数 ${jiahao.score}，奶龙指数 ${nailoong.score} 的战绩卡`}/><div><h2>战绩卡已生成</h2><p>图片只包含公开分数和判词，不包含你的原始素材。</p><button type="button" className="primary-button" onClick={sharePoster}><Icon name="share"/> 分享或保存</button></div></section></div> : null}
+    <section className="next-play"><strong>接着玩</strong><button type="button" onClick={() => onNavigate('friends')}>拉好友比豪气 <Icon name="arrow"/></button><button type="button" className="nailoong-link" onClick={() => onNavigate('lab')}>去玩奶龙反应局 <Icon name="arrow"/></button></section>
+    {poster ? <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPoster('')}><section className="poster-dialog" role="dialog" aria-modal="true" aria-label="嘉豪战绩卡"><button type="button" autoFocus className="dialog-close" aria-label="关闭战绩卡" onClick={() => setPoster('')}><Icon name="close"/></button><img src={poster} alt={`嘉豪指数 ${jiahao.score} 的战绩卡`}/><div><h2>战绩卡已生成</h2><p>图片只包含公开分数和判词，不包含你的原始素材。</p><button type="button" className="primary-button" onClick={sharePoster}><Icon name="share"/> 分享或保存</button></div></section></div> : null}
   </main>;
 }

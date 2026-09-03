@@ -1,10 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-test('首页生图入口一步直达并自动展开生图局', async ({ page }) => {
+test('奶龙实验室内可一步展开生图局', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /想直接整活/ }).click();
+  const labButton = page.viewportSize()?.width <= 760
+    ? page.getByRole('button', { name: '实验室', exact: true })
+    : page.getByRole('button', { name: '抽象实验室', exact: true });
+  await labButton.click();
+  await page.getByRole('button', { name: /奶蛙生图局/ }).click();
   await expect(page.getByLabel('你想让奶蛙干什么？')).toBeVisible();
-  await expect(page).toHaveURL(/#nailoong-image-studio$/);
 });
 
 test('抽象生图局可生成和下载图片，成功态不向玩家展示技术信息', async ({ page }) => {
@@ -40,9 +43,9 @@ test('抽象生图局可生成和下载图片，成功态不向玩家展示技�
   await expect(page.getByText('奶蛙正在画')).toBeVisible();
   const assayButton = page.viewportSize()?.width <= 760
     ? page.getByRole('button', { name: '鉴定', exact: true }).last()
-    : page.getByRole('button', { name: '鉴定', exact: true }).first();
+    : page.getByRole('button', { name: '嘉豪鉴定', exact: true }).first();
   await assayButton.click();
-  await expect(page.getByRole('heading', { name: '先别急着装正常。' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '测测你有多豪' })).toBeVisible();
   await expect(page.getByText('奶蛙正在画')).toBeVisible();
   finishGeneration();
   await expect(page.getByText('抽象现场已送达')).toBeVisible();

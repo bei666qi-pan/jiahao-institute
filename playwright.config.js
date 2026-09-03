@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const port = Number(process.env.PLAYWRIGHT_PORT || 8080);
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: './test/e2e',
   fullyParallel: true,
@@ -12,7 +15,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 8_000 },
   use: {
-    baseURL: 'http://127.0.0.1:8080',
+    baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -22,8 +25,8 @@ export default defineConfig({
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: 'node server.mjs',
-    url: 'http://127.0.0.1:8080/healthz',
+    command: `PORT=${port} node server.mjs`,
+    url: `${baseURL}/healthz`,
     reuseExistingServer: !process.env.CI,
     timeout: 20_000,
   },

@@ -65,8 +65,7 @@ function ReactionGame({ onReactionComplete }) {
   </div>;
 }
 
-function AbstractCourt() {
-  const [open, setOpen] = useState(false);
+function AbstractCourt({ open, onToggle }) {
   const [first, setFirst] = useState('我家猫会说人话，只是不愿意当着你们的面说。');
   const [second, setSecond] = useState('昨天被外星人绑架了，所以消息没回。');
   const [result, setResult] = useState(null);
@@ -91,28 +90,9 @@ function AbstractCourt() {
   };
 
   return <section className={`lab-panel compact ${open ? 'open' : ''}`}>
-    <button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><strong>抽象法庭</strong><small>两句话，判谁更离谱</small><Icon name="scale"/></button>
+    <button type="button" className="panel-heading" onClick={onToggle} aria-expanded={open}><strong>奶龙抽象法庭</strong><small>两句话，判谁的反应更离谱</small><Icon name="scale"/></button>
     {open ? <div className="court-body"><div className="court-inputs"><label>原告证词<textarea value={first} onChange={(event) => setFirst(event.target.value)} /></label><b>VS</b><label>被告证词<textarea value={second} onChange={(event) => setSecond(event.target.value)} /></label></div><button type="button" className="yellow-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={judge}>{busy ? '正在开庭…' : '立即开庭'} <Icon name="scale"/></button>{result ? <div className="court-result"><strong>{result.battle.title}</strong><p>{result.battle.reason}</p></div> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 原始证词只用于本次娱乐裁决，不进入好友榜。</p></div> : null}
   </section>;
-}
-
-function ToughTalkTranslator() {
-  const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('今天有点累。');
-  const [output, setOutput] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const generate = async () => {
-    setBusy(true);
-    try {
-      const payload = await postJson('/api/quote', { input, mode: 'hao', level: '豪气冲天', style: '高冷' });
-      setOutput(payload.output);
-    } catch {
-      setOutput(`不是累，只是有些事情，说了你们也不一定懂。`);
-    } finally { setBusy(false); }
-  };
-
-  return <section id="tough-talk-translator" className={`lab-panel compact ${open ? 'open' : ''}`}><button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}><strong>嘴硬翻译器</strong><small>把普通话翻译成“我真没事”</small><Icon name="text"/></button>{open ? <div className="translator-body"><textarea aria-label="嘴硬翻译原句" value={input} onChange={(event) => setInput(event.target.value)} /><button type="button" className="primary-button" onClick={generate} disabled={busy}>{busy ? '翻译中…' : '开始嘴硬'}</button>{output ? <blockquote>{output}</blockquote> : null}</div> : null}</section>;
 }
 
 const IMAGE_SCENES = [
@@ -127,18 +107,13 @@ const IMAGE_RATIOS = [
   { id: '16:9', label: '横版 16:9' },
 ];
 
-function AbstractImageGame({ imageTask, imageJob, onNavigate }) {
-  const [open, setOpen] = useState(() => imageJob.status !== 'idle' || window.location.hash === '#nailoong-image-studio');
+function AbstractImageGame({ imageTask, imageJob, onNavigate, open, onToggle }) {
   const [prompt, setPrompt] = useState('在雨夜撑伞等公交，神态平静得不合时宜');
   const [scene, setScene] = useState('cinematic');
   const [aspectRatio, setAspectRatio] = useState('1:1');
   const result = imageJob.result;
   const error = imageJob.status === 'error' ? '这张图没生成出来，换个说法再试一次。' : '';
   const busy = imageJob.status === 'running';
-
-  useEffect(() => {
-    if (imageJob.status !== 'idle') setOpen(true);
-  }, [imageJob.status]);
 
   const generate = async () => {
     trackProductEvent('lab_game_started', { game: 'image' });
@@ -150,7 +125,7 @@ function AbstractImageGame({ imageTask, imageJob, onNavigate }) {
 
   const imageSource = result?.imageDataUrl || result?.imageUrl;
   return <section id="nailoong-image-studio" className={`lab-panel image-lab-panel ${open ? 'open' : ''}`}>
-    <button type="button" className="panel-heading" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+    <button type="button" className="panel-heading" onClick={onToggle} aria-expanded={open}>
       <strong>奶蛙生图局</strong><small>把离谱脑洞变成现场</small><Icon name="image"/>
     </button>
     {open ? <div className="image-lab-body">
@@ -174,12 +149,17 @@ function AbstractImageGame({ imageTask, imageJob, onNavigate }) {
 }
 
 export function LabPage({ latestResult, onNavigate, onReactionComplete, imageTask, imageJob }) {
+  const [activeTool, setActiveTool] = useState(() => imageJob.status !== 'idle' || window.location.hash === '#nailoong-image-studio' ? 'image' : '');
+
+  useEffect(() => {
+    if (imageJob.status !== 'idle') setActiveTool('image');
+  }, [imageJob.status]);
+
+  const toggleTool = (tool) => setActiveTool((current) => current === tool ? '' : tool);
+
   return <main className="lab-page">
-    <header className="lab-title"><div><h1>今天抽象点什么？</h1><p>没有标准答案，只有你的真实反应。</p></div>{latestResult ? <div className="persistent-score"><span>嘉豪 <b>{latestResult.jiahao?.score ?? latestResult.score}</b></span><span>奶龙 <b>{latestResult.nailoong?.score}</b></span></div> : null}</header>
+    <header className="lab-title"><div><h1>奶龙实验室</h1><p>这里单独玩奶龙。五道题，看你的真实反应。</p></div>{latestResult?.nailoong ? <div className="persistent-score"><span>上次奶龙指数 <b>{latestResult.nailoong.score}</b></span></div> : null}</header>
     <section className="lab-panel reaction-panel"><div className="panel-heading static"><strong>奶龙反应局</strong><small>五道题，看看你会怎么接</small><Icon name="flask"/></div><ReactionGame onReactionComplete={onReactionComplete}/></section>
-    <AbstractCourt />
-    <section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section>
-    <ToughTalkTranslator />
-    <AbstractImageGame imageTask={imageTask} imageJob={imageJob} onNavigate={onNavigate}/>
+    <section className="lab-tool-rail" aria-label="更多奶龙玩法"><AbstractCourt open={activeTool === 'court'} onToggle={() => toggleTool('court')}/><section className="lab-panel compact"><button type="button" className="panel-heading" onClick={() => onNavigate('friends')}><strong>好友整活房</strong><small>叫上朋友一起玩</small><Icon name="users"/></button></section><AbstractImageGame imageTask={imageTask} imageJob={imageJob} onNavigate={onNavigate} open={activeTool === 'image'} onToggle={() => toggleTool('image')}/></section>
   </main>;
 }

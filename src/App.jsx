@@ -10,12 +10,13 @@ import { FriendsPage } from './features/friends/FriendsPage';
 import { ArchivePage } from './features/archive/ArchivePage';
 import { HaoPage } from './features/hao/HaoPage';
 import './editorial.css';
+import './hao-universe.css';
 
 const NAV_ITEMS = [
-  { id: 'assay', label: '鉴定', icon: 'stamp' },
   { id: 'hao', label: '豪气宇宙', mobileLabel: '豪气', icon: 'spark' },
+  { id: 'assay', label: '嘉豪鉴定', mobileLabel: '鉴定', icon: 'stamp' },
   { id: 'lab', label: '抽象实验室', mobileLabel: '实验室', icon: 'flask' },
-  { id: 'friends', label: '好友战绩', mobileLabel: '好友', icon: 'users' },
+  { id: 'friends', label: '好友豪气榜', mobileLabel: '好友', icon: 'users' },
 ];
 
 function routeRoomCode() {
@@ -23,7 +24,7 @@ function routeRoomCode() {
 }
 
 function Header({ page, onNavigate }) {
-  return <header className="editorial-header"><button type="button" className="editorial-brand" onClick={() => onNavigate('assay')} aria-label="返回鉴定首页"><span>嘉豪</span>鉴定所<i/></button><nav aria-label="主导航">{NAV_ITEMS.map((item) => <button type="button" key={item.id} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => onNavigate(item.id)}>{item.label}</button>)}</nav><button type="button" className="archive-button" onClick={() => onNavigate('archive')}><Icon name="archive" size={18}/> 我的档案</button></header>;
+  return <header className="editorial-header"><button type="button" className="editorial-brand" onClick={() => onNavigate('hao')} aria-label="返回豪气宇宙"><span>豪气</span>宇宙</button><nav aria-label="主导航">{NAV_ITEMS.map((item) => <button type="button" key={item.id} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => onNavigate(item.id)}>{item.label}</button>)}</nav><button type="button" className={`archive-button ${page === 'archive' ? 'active' : ''}`} aria-current={page === 'archive' ? 'page' : undefined} onClick={() => onNavigate('archive')}><Icon name="archive" size={18}/> 人格档案</button></header>;
 }
 
 function MobileNav({ page, onNavigate }) {
@@ -46,7 +47,7 @@ function ImageGenerationDock({ job, onOpen, onDismiss }) {
 export default function App() {
   const initialRoomCode = routeRoomCode();
   const [roomCode, setRoomCode] = useState(initialRoomCode);
-  const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'assay');
+  const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'hao');
   const [result, setResult] = useState(null);
   const imageTask = useMemo(() => createImageGenerationTask((input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(IMAGE_GENERATION_REQUEST_TIMEOUT_MS) })), []);
   const imageJob = useSyncExternalStore(imageTask.subscribe, imageTask.getSnapshot, imageTask.getSnapshot);
@@ -109,7 +110,7 @@ export default function App() {
     {page === 'hao' ? <HaoPage onNavigate={navigate}/> : null}
     {page === 'friends' ? <FriendsPage roomCode={roomCode} latestResult={latestResult} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'archive' ? <ArchivePage history={history} onSelectHistory={(item) => { setResult(item); setPage('assay'); window.scrollTo({ top: 0 }); }} onClear={clear}/> : null}
-    <footer className="editorial-footer"><strong>嘉豪鉴定所</strong><span>原始内容不保存，结果纯属娱乐。</span></footer>
+    <footer className="editorial-footer"><strong>豪气宇宙</strong><span>原始内容不保存，结果仅供娱乐。</span></footer>
     <ImageGenerationDock job={imageJob} onOpen={openImageStudio} onDismiss={imageTask.dismiss}/>
     <MobileNav page={page} onNavigate={navigate}/>
   </div>;
