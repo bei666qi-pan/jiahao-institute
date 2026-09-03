@@ -219,10 +219,33 @@ export function normalizePkResult(raw, names, source) {
 }
 
 function extractJson(text) {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('模型未返回有效结构');
-  return JSON.parse(text.slice(start, end + 1));
+  const source = (typeof text === 'string' ? text : '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  const start = source.indexOf('{');
+  if (start < 0) throw new Error('模型未返回有效结构');
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === '{') depth += 1;
+    else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return JSON.parse(source.slice(start, index + 1));
+    }
+  }
+  throw new Error('模型未返回完整结构');
 }
 
 function getProvider(isVision) {
@@ -248,7 +271,14 @@ async function requestModel(provider, systemPrompt, content) {
     const response = await fetch(`${provider.base}/chat/completions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${provider.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: provider.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content }], temperature: 0.85, response_format: { type: 'json_object' } }),
+      body: JSON.stringify({
+        model: provider.model,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content }],
+        thinking: { type: 'disabled' },
+        max_tokens: 1200,
+        temperature: 0.85,
+        response_format: { type: 'json_object' },
+      }),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`大模型请求失败（${response.status}）`);
