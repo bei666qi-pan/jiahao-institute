@@ -18,7 +18,11 @@ function setupEnv(mockUrl) {
   process.env.DEEPSEEK_OUTPUT_CNY_PER_MILLION = '8';
   process.env.DEEPSEEK_CACHED_INPUT_CNY_PER_MILLION = '0.5';
   // Also configure vision provider to text since we test text flows
-  process.env.ARK_BASE_URL = `${mockUrl}/`;
+  // The legacy Ark endpoint can be configured but no longer authorized.
+  // When ARK_IMAGE_API_KEY is selected, its matching image endpoint namespace
+  // must also be used for multimodal chat requests.
+  process.env.ARK_BASE_URL = 'http://127.0.0.1:1/legacy';
+  process.env.ARK_IMAGE_URL = `${mockUrl}/images/generations`;
   // Production keeps the working multimodal credential in ARK_IMAGE_API_KEY.
   // Photo/chat analysis must share that credential instead of requiring a
   // second, independently configured ARK_API_KEY.
