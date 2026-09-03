@@ -185,3 +185,19 @@ test('任务只允许所属访客查询且终态仍消耗额度', async () => {
   assert.equal(task.status, 'failed');
   assert.equal((await service.quota('visitor-1')).remaining, 0);
 });
+
+test('供应商状态已取回时数据库回写失败不阻断用户看到真实成片', async () => {
+  const store = memoryStore();
+  const provider = {
+    create: async () => ({ id: 'minimax-accepted' }),
+    get: async () => ({ status: 'succeeded', videoUrl: 'https://video.test/real.mp4', errorCode: null }),
+  };
+  const service = createVideoGenerationService({ store, provider, now: () => now, id: () => 'task-sync-degraded' });
+  await service.create('visitor-1', { character: 'nailoong', prompt: '缓慢挥手' });
+  store.update = async () => { throw new Error('database write unavailable'); };
+
+  const task = await service.status('task-sync-degraded', 'visitor-1');
+  assert.equal(task.status, 'succeeded');
+  assert.equal(task.videoUrl, 'https://video.test/real.mp4');
+  assert.equal(task.quota.remaining, 0);
+});
