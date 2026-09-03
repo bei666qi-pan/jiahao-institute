@@ -24,7 +24,9 @@ export { signReactionResult, verifyReactionResultToken } from './server/reaction
 const PORT = Number(process.env.PORT || 8080);
 const DIST_DIR = fileURLToPath(new URL('./dist', import.meta.url));
 const TEXT_PROVIDER = resolveTextProvider(process.env);
-const VISION_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
+const ARK_API_BASE = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
+const ARK_IMAGE_URL = process.env.ARK_IMAGE_URL || `${ARK_API_BASE}/images/generations`;
+const VISION_API_BASE = (process.env.ARK_IMAGE_API_KEY ? ARK_IMAGE_URL.replace(/\/images\/generations$/, '') : ARK_API_BASE).replace(/\/$/, '');
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
 const VISION_API_KEY = process.env.ARK_IMAGE_API_KEY || process.env.ARK_API_KEY;
 const IMAGE_CONFIG = {
@@ -36,12 +38,12 @@ const IMAGE_CONFIG = {
   },
   volcengine: {
     key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
-    url: process.env.ARK_IMAGE_URL || `${VISION_API_BASE}/images/generations`,
+    url: ARK_IMAGE_URL,
     model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
   },
   quality: {
     key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
-    url: `${(process.env.ARK_IMAGE_URL || `${VISION_API_BASE}/images/generations`).replace(/\/images\/generations$/, '')}/chat/completions`,
+    url: `${ARK_IMAGE_URL.replace(/\/images\/generations$/, '')}/chat/completions`,
     model: VISION_MODEL,
   },
 };
