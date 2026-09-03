@@ -16,11 +16,9 @@ test('production quote matrix calls the real cloud API and updates every result'
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: '抽象实验室', exact: true }).click();
-  await page.getByRole('button', { name: /嘴硬翻译器/ }).click();
 
-  const input = page.getByLabel('嘴硬翻译原句');
-  const output = page.locator('.translator-body blockquote');
+  const input = page.getByLabel('要豪化的原句');
+  const output = page.locator('.hao-quote-output blockquote');
   await expect(input).toBeVisible();
 
   for (const sample of cases) {
@@ -31,7 +29,7 @@ test('production quote matrix calls the real cloud API and updates every result'
       (response) => response.url().endsWith('/api/quote') && response.request().method() === 'POST',
       { timeout: 70_000 },
     );
-    await page.getByRole('button', { name: '开始嘴硬' }).click();
+    await page.getByRole('button', { name: /生成嘉豪语录/ }).click();
 
     const response = await responsePromise;
     const body = await response.json();
