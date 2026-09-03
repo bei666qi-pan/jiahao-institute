@@ -202,7 +202,7 @@ export function createVideoGenerationService({ store, provider, enabled = true, 
         }
       }
       const currentQuota = await quota(visitorId);
-      if (TERMINAL.has(task.status)) currentQuota.activeTaskId = null;
+      if (TERMINAL.has(task.status) && currentQuota.activeTaskId === task.id) currentQuota.activeTaskId = null;
       return publicTask(task, currentQuota);
     },
   };
