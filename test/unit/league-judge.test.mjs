@@ -27,12 +27,14 @@ test('联赛 AI 判定关闭思考并返回可公开结构', async () => {
     usage: { prompt_tokens: 50, completion_tokens: 20 },
   }, async (base, getRequest) => {
     const judge = createLeagueJudge({ MINIMAX_TEXT_API_KEY: 'test-key', MINIMAX_TEXT_BASE_URL: base, MINIMAX_TEXT_MODEL: 'MiniMax-M3' });
-    const result = await judge({ prompt: '你迟到了怎么解释？', answer: '我只是让时间先走一步。', character: 'jiahao' });
+    const result = await judge({ prompt: '你迟到了怎么解释？', answer: '我只是让时间先走一步。', character: 'jiahao', mode: '挽尊局', goal: '接住尴尬。', twist: '不能出现“我”' });
     assert.deepEqual(result.data, { score: 87, tag: '淡定王', verdict: '人没起身，借口已经先到现场。', publishable: true });
     assert.equal(result.provider.id, 'minimax');
     assert.equal(getRequest().thinking.type, 'disabled');
     assert.equal(getRequest().response_format.type, 'json_object');
     assert.equal(getRequest().max_tokens, 220);
+    assert.match(getRequest().messages[0].content, /贴题.*梗感.*原创.*加码/s);
+    assert.match(getRequest().messages[1].content, /挽尊局.*不能出现“我”/s);
   });
 });
 

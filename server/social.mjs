@@ -8,6 +8,7 @@ import {
   digestRecoveryCode,
   generateRecoveryCode,
   getLeaguePrompt,
+  getLeaguePromptGuidance,
   normalizeLeagueAnswer,
   rankLeagueRound,
   shanghaiDate,
@@ -540,6 +541,7 @@ export class SocialService {
         date: dateKey(round.round_date), promptId: round.prompt_id, character: round.character,
         prompt: round.prompt_text, status: round.status, hasSubmitted: ownSubmission?.judge_status === 'ready',
         judgementStatus: ownSubmission?.judge_status || null, submissionId: ownSubmission?.submission_id || null,
+        ...getLeaguePromptGuidance(round.prompt_id, round.character),
       } : null,
       pendingJudgement: pendingJudgement ? { submissionId: pendingJudgement.submission_id, roundDate: dateKey(pendingJudgement.round_date) } : null,
       entries: isMember && ownSubmission?.judge_status === 'ready' ? entries : [],
@@ -583,7 +585,7 @@ export class SocialService {
     let lockKey = '';
     try {
       const target = await client.query(`select s.submission_id,s.answer_text,s.judge_status,s.member_id,
-        lr.round_id,lr.prompt_text,lr.character,lr.status round_status,ls.season_id,r.room_id
+        lr.round_id,lr.prompt_id,lr.prompt_text,lr.character,lr.status round_status,ls.season_id,r.room_id
         from jh_league_submissions s join jh_league_members lm on lm.member_id=s.member_id
         join jh_league_rounds lr on lr.round_id=s.round_id join jh_league_seasons ls on ls.season_id=lr.season_id
         join jh_rooms r on r.room_id=ls.room_id
@@ -592,6 +594,7 @@ export class SocialService {
         order by lr.round_date desc limit 1`, [code, visitorId, requestedId]);
       if (!target.rowCount) throw Object.assign(new Error('还没有可重判的答案'), { statusCode: 404 });
       const submission = target.rows[0];
+      const guidance = getLeaguePromptGuidance(submission.prompt_id, submission.character);
       lockKey = `league-judge:${submission.round_id}:${submission.member_id}`;
       const lock = await client.query('select pg_try_advisory_lock(hashtext($1)) locked', [lockKey]);
       locked = Boolean(lock.rows[0]?.locked);
@@ -603,7 +606,7 @@ export class SocialService {
       let judged;
       try {
         await client.query("update jh_league_submissions set judge_status='pending' where submission_id=$1", [existing.rows[0].submission_id]);
-        judged = await this.judgeLeagueAnswer({ prompt: submission.prompt_text, answer: existing.rows[0].answer_text, character: submission.character });
+        judged = await this.judgeLeagueAnswer({ prompt: submission.prompt_text, answer: existing.rows[0].answer_text, character: submission.character, ...guidance });
       } catch (error) {
         await client.query("update jh_league_submissions set judge_status='failed' where submission_id=$1", [existing.rows[0].submission_id]);
         throw Object.assign(new Error('AI 暂时没判完，答案已保留，可稍后重试'), { statusCode: 503, code: 'LEAGUE_JUDGE_PENDING', cause: error });

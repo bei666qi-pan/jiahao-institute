@@ -130,7 +130,11 @@ test('跨日锁榜后的失败答案仍能按原题重判并重算当天积分',
   };
   const service = new SocialService({}, 'test-secret', {
     judgeLeagueAnswer: async (input) => {
-      assert.deepEqual(input, { prompt: '昨天的问题', answer: '昨天的答案', character: 'jiahao' });
+      assert.equal(input.prompt, '昨天的问题');
+      assert.equal(input.answer, '昨天的答案');
+      assert.equal(input.character, 'jiahao');
+      assert.match(input.mode, /局$/);
+      assert.ok(input.twist);
       return { data: { score: 91, tag: '补判王者', verdict: '迟到的分数仍然算数。', publishable: true } };
     },
   });
