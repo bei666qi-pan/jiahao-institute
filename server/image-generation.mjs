@@ -147,6 +147,13 @@ export async function generateAbstractImage(payload, config, fetchImpl = fetch) 
     data = await postImage(volcengine.url, volcengine.key, body, fetchImpl);
   }
   const result = imageResult(data, volcengine, request);
-  result.quality = await assertImageIdentity(result, config?.quality, fetchImpl);
-  return result;
+  try {
+    result.quality = await assertImageIdentity(result, config?.quality, fetchImpl);
+    return result;
+  } catch (error) {
+    if (error?.code !== 'IDENTITY_MISMATCH') throw error;
+    const retryResult = imageResult(await postImage(volcengine.url, volcengine.key, body, fetchImpl), volcengine, request);
+    retryResult.quality = await assertImageIdentity(retryResult, config?.quality, fetchImpl);
+    return retryResult;
+  }
 }

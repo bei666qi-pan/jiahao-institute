@@ -64,6 +64,7 @@ const IMAGE_CONFIG = {
 };
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
+const PROVIDER_BUSY_MESSAGE = '当前使用人数过多，奶娃十分之抱歉';
 const observability = new Observability();
 const MINIMAX_VIDEO_BASE = (process.env.MINIMAX_VIDEO_BASE_URL || 'https://api.minimaxi.com').replace(/\/$/, '');
 const VIDEO_CONFIG = {
@@ -411,7 +412,7 @@ async function handleImageRequest(req, res) {
       model: null, statusCode, ok: false, latencyMs: performance.now() - started,
       errorCode: error?.code || 'IMAGE_GENERATION_FAILED', errorMessage: message,
     });
-    return sendJson(res, statusCode, { error: message, code: error?.code || 'IMAGE_GENERATION_FAILED' });
+    return sendJson(res, statusCode, { error: statusCode >= 500 ? PROVIDER_BUSY_MESSAGE : message, code: error?.code || 'IMAGE_GENERATION_FAILED' });
   }
 }
 
