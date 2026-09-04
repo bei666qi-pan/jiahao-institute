@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
+import { AiProgress } from '../../components/AiProgress';
 import { JiahaoPortrait } from '../../components/JiahaoPortrait';
 import { makeFallbackAssessment } from '../../validation';
 import { trackProductEvent } from '../../telemetry';
@@ -27,10 +28,12 @@ function HaoQuoteStudio({ inputRef }) {
   const [style, setStyle] = useState('高冷');
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [startedAt, setStartedAt] = useState(null);
   const [notice, setNotice] = useState('');
 
   const generate = async () => {
     setBusy(true);
+    setStartedAt(Date.now());
     setNotice('');
     trackProductEvent('lab_game_started', { game: 'hao_quote' });
     try {
@@ -100,7 +103,7 @@ function HaoQuoteStudio({ inputRef }) {
         <details className="hao-advanced"><summary>调整豪气风格</summary><fieldset disabled={mode === 'dehao'}><legend>豪气等级</legend><div className="hao-option-grid levels">{QUOTE_LEVELS.map((item) => <button type="button" key={item} aria-pressed={level === item} onClick={() => setLevel(item)}>{item}</button>)}</div></fieldset><fieldset disabled={mode === 'dehao'}><legend>表达风格</legend><div className="hao-option-grid styles">{QUOTE_STYLES.map((item) => <button type="button" key={item} aria-pressed={style === item} onClick={() => setStyle(item)}>{item}</button>)}</div></fieldset></details>
         <button type="button" className="primary-button" disabled={busy || input.trim().length < 2} onClick={generate}>{busy ? '豪气正在汇聚…' : mode === 'dehao' ? '一键把嘉豪说人话' : '生成嘉豪语录'} <Icon name="arrow"/></button>
       </div>
-      <div className="hao-quote-output">{result ? <><span>这句很豪</span><blockquote>{result.output}</blockquote><p className="hao-fallback-note">{result.fallback ? '这次用了备用玩法，结果仅供娱乐。' : '这句话由 AI 生成，请当作娱乐灵感。'}</p><div className="hao-output-actions"><button type="button" className="outline-button" onClick={copy}><Icon name="copy" size={17}/>复制</button><button type="button" className="outline-button" onClick={download}><Icon name="download" size={17}/>保存语录卡</button></div>{notice ? <p role="status">{notice}</p> : null}</> : <strong>放一句普通话进来，<br/>看它能有多豪。</strong>}</div>
+      <div className="hao-quote-output">{busy ? <AiProgress label="AI 语录" kind="quote" startedAt={startedAt} /> : result ? <><span>这句很豪</span><blockquote>{result.output}</blockquote><p className="hao-fallback-note">{result.fallback ? '这次用了备用玩法，结果仅供娱乐。' : '这句话由 AI 生成，请当作娱乐灵感。'}</p><div className="hao-output-actions"><button type="button" className="outline-button" onClick={copy}><Icon name="copy" size={17}/>复制</button><button type="button" className="outline-button" onClick={download}><Icon name="download" size={17}/>保存语录卡</button></div>{notice ? <p role="status">{notice}</p> : null}</> : <strong>放一句普通话进来，<br/>看它能有多豪。</strong>}</div>
     </div>
   </section>;
 }
@@ -111,11 +114,12 @@ function HaoPkArena({ open, onToggle }) {
   const [consent, setConsent] = useState(false);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [startedAt, setStartedAt] = useState(null);
   const [error, setError] = useState('');
 
   const start = async () => {
     if (!consent) return setError('请先确认双方素材授权。');
-    setBusy(true); setError('');
+    setBusy(true); setStartedAt(Date.now()); setError('');
     trackProductEvent('lab_game_started', { game: 'hao_pk' });
     try {
       const payload = await postJson('/api/pk', { participants: [{ name: '甲方', mode: 'text', input: first }, { name: '乙方', mode: 'text', input: second }] }, { signal: AbortSignal.timeout(30_000) });
@@ -132,7 +136,7 @@ function HaoPkArena({ open, onToggle }) {
 
   return <section className={`hao-panel ${open ? 'open' : ''}`}>
     <button type="button" className="hao-panel-heading" onClick={onToggle} aria-expanded={open}><div><strong>双人豪气 PK</strong><small>双方各出一句话，看看谁更豪</small></div><Icon name="sword"/></button>
-    {open ? <div className="hao-pk-body"><div className="hao-pk-inputs"><label>甲方豪气样本<textarea value={first} onChange={(event) => setFirst(event.target.value)}/></label><b>VS</b><label>乙方豪气样本<textarea value={second} onChange={(event) => setSecond(event.target.value)}/></label></div><label className="consent-row"><input aria-label="确认双方素材授权" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)}/><span>我确认有权使用双方文字。</span></label>{error ? <p className="form-message error" role="alert">{error}</p> : null}<button type="button" className="primary-button hao-pk-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={start}>{busy ? '正在判…' : '开始豪气 PK'} <Icon name="sword"/></button>{result ? <div className="hao-pk-result"><small>本局结果</small><h3>{result.battle.title}</h3><p>{result.battle.reason}</p><div>{result.participants.map((item, index) => <span key={`${item.name}-${index}`}><b>{item.name || (index ? '乙方' : '甲方')}</b><strong>{item.score}</strong><em>{item.type}</em></span>)}</div>{result.fallback ? <small>这次用了备用玩法，结果仅供娱乐。</small> : null}</div> : null}</div> : null}
+    {open ? <div className="hao-pk-body"><div className="hao-pk-inputs"><label>甲方豪气样本<textarea value={first} onChange={(event) => setFirst(event.target.value)}/></label><b>VS</b><label>乙方豪气样本<textarea value={second} onChange={(event) => setSecond(event.target.value)}/></label></div><label className="consent-row"><input aria-label="确认双方素材授权" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)}/><span>我确认有权使用双方文字。</span></label>{error ? <p className="form-message error" role="alert">{error}</p> : null}<button type="button" className="primary-button hao-pk-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={start}>{busy ? '正在判…' : '开始豪气 PK'} <Icon name="sword"/></button>{busy ? <AiProgress label="AI PK" kind="duel" startedAt={startedAt} compact/> : null}{result ? <div className="hao-pk-result"><small>本局结果</small><h3>{result.battle.title}</h3><p>{result.battle.reason}</p><div>{result.participants.map((item, index) => <span key={`${item.name}-${index}`}><b>{item.name || (index ? '乙方' : '甲方')}</b><strong>{item.score}</strong><em>{item.type}</em></span>)}</div>{result.fallback ? <small>这次用了备用玩法，结果仅供娱乐。</small> : null}</div> : null}</div> : null}
   </section>;
 }
 

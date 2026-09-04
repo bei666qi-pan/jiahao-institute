@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest, postJson, todayInShanghai } from '../../app/api';
 import { Icon } from '../../components/Icon';
+import { AiProgress } from '../../components/AiProgress';
 import { makeFallbackAssessment } from '../../validation';
 import { trackProductEvent } from '../../telemetry';
 
@@ -26,6 +27,7 @@ function ReactionGame({ onReactionComplete }) {
   const [customOpen, setCustomOpen] = useState(false);
   const [customInput, setCustomInput] = useState('');
   const [customBusy, setCustomBusy] = useState(false);
+  const [customStartedAt, setCustomStartedAt] = useState(null);
   const [customError, setCustomError] = useState('');
 
   useEffect(() => {
@@ -61,6 +63,7 @@ function ReactionGame({ onReactionComplete }) {
     const reaction = customInput.trim();
     if (!question || reaction.length < 2) return setCustomError('至少写两个字，AI 才知道怎么判。');
     setCustomBusy(true);
+    setCustomStartedAt(Date.now());
     setCustomError('');
     trackProductEvent('lab_game_started', { game: 'reaction_custom' });
     try {
@@ -95,7 +98,7 @@ function ReactionGame({ onReactionComplete }) {
     <div className="reaction-options">{question.options.map((option) => <button type="button" className="reaction-option" key={option.id} onClick={() => choose(question.id, option.id)}><span>{option.label}<small>{option.tone}</small></span><Icon name="arrow" size={18}/></button>)}</div>
     <div className={`reaction-custom ${customOpen ? 'open' : ''}`}>
       <button type="button" className="reaction-custom-toggle" aria-expanded={customOpen} onClick={() => { setCustomOpen((value) => !value); setCustomError(''); }}><span><b>写自己的反应</b><small>不选预设，让 AI 单独判这一招</small></span><Icon name={customOpen ? 'close' : 'spark'} size={18}/></button>
-      {customOpen ? <div className="reaction-custom-form"><label htmlFor="custom-reaction">写下你的真实反应</label><textarea id="custom-reaction" maxLength={300} value={customInput} onChange={(event) => setCustomInput(event.target.value)} placeholder="例如：先沉默三秒，然后问大家要不要一起加班。"/><div><small>{customInput.length} / 300</small><button type="button" className="yellow-button" disabled={customBusy || customInput.trim().length < 2} onClick={judgeCustom}>{customBusy ? 'AI 正在判别…' : '交给 AI 判别'} <Icon name="spark" size={17}/></button></div>{customError ? <p className="form-message error" role="alert">{customError}</p> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 文字只用于本次娱乐判别，不会加入公开榜单。</p></div> : null}
+      {customOpen ? <div className="reaction-custom-form"><label htmlFor="custom-reaction">写下你的真实反应</label><textarea id="custom-reaction" maxLength={300} value={customInput} onChange={(event) => setCustomInput(event.target.value)} placeholder="例如：先沉默三秒，然后问大家要不要一起加班。"/><div><small>{customInput.length} / 300</small><button type="button" className="yellow-button" disabled={customBusy || customInput.trim().length < 2} onClick={judgeCustom}>{customBusy ? 'AI 正在判别…' : '交给 AI 判别'} <Icon name="spark" size={17}/></button></div>{customBusy ? <AiProgress label="AI 判别" kind="analysis" startedAt={customStartedAt} compact/> : null}{customError ? <p className="form-message error" role="alert">{customError}</p> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 文字只用于本次娱乐判别，不会加入公开榜单。</p></div> : null}
     </div>
   </div>;
 }
@@ -105,9 +108,11 @@ function AbstractCourt({ open, onToggle }) {
   const [second, setSecond] = useState('昨天被外星人绑架了，所以消息没回。');
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [startedAt, setStartedAt] = useState(null);
 
   const judge = async () => {
     setBusy(true);
+    setStartedAt(Date.now());
     trackProductEvent('lab_game_started', { game: 'court' });
     try {
       const payload = await postJson('/api/court', { participants: [{ name: '原告', mode: 'text', input: first }, { name: '被告', mode: 'text', input: second }] }, { signal: AbortSignal.timeout(10_000) });
@@ -126,7 +131,7 @@ function AbstractCourt({ open, onToggle }) {
 
   return <section className={`lab-panel compact ${open ? 'open' : ''}`}>
     <button type="button" className="panel-heading" onClick={onToggle} aria-expanded={open}><strong>奶龙抽象法庭</strong><small>两句话，判谁的反应更离谱</small><Icon name="scale"/></button>
-    {open ? <div className="court-body"><div className="court-inputs"><label>原告证词<textarea value={first} onChange={(event) => setFirst(event.target.value)} /></label><b>VS</b><label>被告证词<textarea value={second} onChange={(event) => setSecond(event.target.value)} /></label></div><button type="button" className="yellow-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={judge}>{busy ? '正在开庭…' : '立即开庭'} <Icon name="scale"/></button>{result ? <div className="court-result"><strong>{result.battle.title}</strong><p>{result.battle.reason}</p></div> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 原始证词只用于本次娱乐裁决，不进入好友榜。</p></div> : null}
+    {open ? <div className="court-body"><div className="court-inputs"><label>原告证词<textarea value={first} onChange={(event) => setFirst(event.target.value)} /></label><b>VS</b><label>被告证词<textarea value={second} onChange={(event) => setSecond(event.target.value)} /></label></div><button type="button" className="yellow-button" disabled={busy || first.trim().length < 2 || second.trim().length < 2} onClick={judge}>{busy ? '正在开庭…' : '立即开庭'} <Icon name="scale"/></button>{busy ? <AiProgress label="AI 裁决" kind="duel" startedAt={startedAt} compact/> : null}{result ? <div className="court-result"><strong>{result.battle.title}</strong><p>{result.battle.reason}</p></div> : null}<p className="privacy-line"><Icon name="lock" size={15}/> 原始证词只用于本次娱乐裁决，不进入好友榜。</p></div> : null}
   </section>;
 }
 
@@ -223,7 +228,7 @@ function CharacterStudio({ mediaTask, mediaJob, onNavigate, open, onToggle }) {
         <p className="privacy-line"><Icon name="lock" size={15}/> {mediaType === 'video' ? '视频为 768P、6 秒并带 AI 水印；' : 'AI 生成内容会带水印；'}不保存你的描述或生成内容。</p>
       </div>
       <div className="image-lab-output" aria-live="polite">
-        {busy && stage ? <div className="image-generating studio-waiting" data-character={mediaJob.character}><span>{stage[0]}</span><img src={outputCharacter.image} alt={`${outputCharacter.name}创作中`}/><strong>{stage[1]}</strong><p>没有虚构进度条。你可以继续浏览，右下角会保留真实阶段。</p><div><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做鉴定</button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>去好友房</button></div></div> : mediaJob.status === 'succeeded' && result?.mediaType === 'video' && result.videoUrl ? <figure className="image-result-figure video-result-figure" data-ratio={result.aspectRatio}><video src={result.videoUrl} controls preload="metadata" aria-label={`生成的${outputCharacter.name}视频`}/><figcaption><strong>{outputCharacter.name}开拍完成。</strong><a className="outline-button" href={result.videoUrl} download={`${outputCharacter.name}视频-${result.id}.mp4`}>下载视频 <Icon name="download" size={18}/></a></figcaption></figure> : mediaJob.status === 'succeeded' && imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
+        {busy && stage ? <div className="image-generating studio-waiting" data-character={mediaJob.character}><span>{stage[0]}</span><img src={outputCharacter.image} alt={`${outputCharacter.name}创作中`}/><strong>{stage[1]}</strong><AiProgress label={`${outputCharacter.name}${mediaJob.mediaType === 'video' ? '视频' : '图片'}`} kind={mediaJob.mediaType} status={mediaJob.status} startedAt={mediaJob.startedAt}/><p>{mediaJob.mediaType === 'video' ? '已确认的任务阶段会保留；百分比仅作等待预估。' : '暂无供应商百分比，因此按预计时长展示等待进度。'}</p><div><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做鉴定</button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>去好友房</button></div></div> : mediaJob.status === 'succeeded' && result?.mediaType === 'video' && result.videoUrl ? <figure className="image-result-figure video-result-figure" data-ratio={result.aspectRatio}><video src={result.videoUrl} controls preload="metadata" aria-label={`生成的${outputCharacter.name}视频`}/><figcaption><strong>{outputCharacter.name}开拍完成。</strong><a className="outline-button" href={result.videoUrl} download={`${outputCharacter.name}视频-${result.id}.mp4`}>下载视频 <Icon name="download" size={18}/></a></figcaption></figure> : mediaJob.status === 'succeeded' && imageSource ? <figure className="image-result-figure" data-ratio={result.aspectRatio}>
           <img src={imageSource} alt={`生成的${outputCharacter.name}场景`}/>
           <figcaption><strong>{outputCharacter.name}图片已完成。</strong><a className="outline-button" href={imageSource} download={`${outputCharacter.name}创作-${result.id || 'image'}.jpg`}>下载图片 <Icon name="download" size={18}/></a></figcaption>
         </figure> : <div className="image-empty studio-preview" data-character={character}><span className="preview-label">{selected.eyebrow}</span><img src={selected.image} alt={`等待创作的${selected.name}`}/><strong>{selected.name} × {mediaType === 'video' ? '动态画面' : '静态画面'}</strong><span>选好角色和媒介<br/>一句话开始创作</span></div>}

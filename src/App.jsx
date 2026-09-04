@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Icon } from './components/Icon';
+import { AiProgress } from './components/AiProgress';
 import { apiRequest, postJson } from './app/api';
 import { createMediaGenerationTask } from './app/mediaGenerationTask';
 import { useAssessmentHistory } from './app/useAssessmentHistory';
@@ -43,7 +44,7 @@ function MediaGenerationDock({ job, onOpen, onDismiss }) {
     <div><strong>{running ? `${role}${medium}${phase}` : complete ? `${role}${medium}已送达` : job.status === 'exhausted' ? '今日视频额度已用' : `${role}${medium}未生成`}</strong><small>{running ? '可以继续浏览，完成后会提醒你。' : complete ? '随时回来播放或下载。' : '回到角色创作室查看详情。'}</small></div>
     <button type="button" onClick={onOpen}>{running ? '查看阶段' : complete ? '查看作品' : '回创作室'}</button>
     {!running ? <button type="button" className="image-job-dismiss" aria-label="关闭创作任务提醒" onClick={onDismiss}><Icon name="close" size={17}/></button> : null}
-    {running ? <i aria-hidden="true"><b/></i> : null}
+    {running ? <AiProgress label="全局任务" kind={job.mediaType} status={job.status} startedAt={job.startedAt} compact/> : null}
   </aside>;
 }
 
