@@ -132,7 +132,7 @@ test('POST /api/images/generate returns 503 when Volcengine media is unconfigure
     body: JSON.stringify({ prompt: '雨夜撑伞等公交', aspectRatio: '1:1' }),
   });
   assert.equal(status, 503);
-  assert.equal(body.error, '火山引擎图片生成服务尚未配置');
+  assert.equal(body.error, '当前使用人数过多，奶娃十分之抱歉');
 });
 
 test('GET /api/videos/quota requires the quota database', async () => {
