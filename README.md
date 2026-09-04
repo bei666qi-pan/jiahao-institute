@@ -61,7 +61,7 @@ npm start
 | 场景 | 环境变量 |
 | --- | --- |
 | 文字鉴定与语录 | `MINIMAX_TEXT_MODEL`（存在 `MINIMAX_API_KEY` 时优先；否则兼容 `DEEPSEEK_MODEL`） |
-| 照片与聊天截图鉴定 | `ARK_MODEL` |
+| 照片与聊天截图鉴定 | `MINIMAX_TEXT_MODEL`（MiniMax 未配置时才回退 `ARK_MODEL`） |
 
 物种图片默认通过现有火山引擎 TOS + CDN 链路 `https://assets.versecraft.cn/jiahao` 加载；如需切换资源域名，可在构建时设置 `VITE_ASSET_BASE_URL`。
 
@@ -168,7 +168,7 @@ npm start
 | Input | Environment variable |
 | --- | --- |
 | Text analysis and quotes | `MINIMAX_TEXT_MODEL` when `MINIMAX_API_KEY` is configured; otherwise `DEEPSEEK_MODEL` |
-| Photo, document-image, and mixed PK analysis | `ARK_MODEL` |
+| Photo, document-image, and mixed PK analysis | `MINIMAX_TEXT_MODEL` (falls back to `ARK_MODEL` only when MiniMax is not configured) |
 
 Species images load from the existing Volcengine TOS + CDN path at `https://assets.versecraft.cn/jiahao` by default. Set `VITE_ASSET_BASE_URL` at build time to override it.
 

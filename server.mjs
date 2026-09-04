@@ -36,6 +36,13 @@ const ARK_IMAGE_URL = process.env.ARK_IMAGE_URL || 'https://ark.cn-beijing.volce
 const VISION_API_BASE = ARK_API_BASE;
 const VISION_MODEL = process.env.ARK_MODEL || 'doubao-seed-2-0-mini-260428';
 const VISION_API_KEY = process.env.ARK_API_KEY || process.env.ARK_IMAGE_API_KEY;
+const ARK_VISION_PROVIDER = {
+  id: 'ark', base: VISION_API_BASE, model: VISION_MODEL, key: VISION_API_KEY, source: '云端多模态大模型',
+  prices: { input: process.env.ARK_INPUT_CNY_PER_MILLION, output: process.env.ARK_OUTPUT_CNY_PER_MILLION, cachedInput: process.env.ARK_CACHED_INPUT_CNY_PER_MILLION },
+};
+const MULTIMODAL_PROVIDER = TEXT_PROVIDER.id === 'minimax' && TEXT_PROVIDER.key
+  ? { ...TEXT_PROVIDER, source: '云端多模态大模型' }
+  : ARK_VISION_PROVIDER;
 const IMAGE_CONFIG = {
   references: {
     nailoong: process.env.NAILOONG_REFERENCE_URL || process.env.IMAGE_REFERENCE_URL || 'https://jiahao.versecraft.cn/assets/nailoong/arms.webp',
@@ -50,9 +57,9 @@ const IMAGE_CONFIG = {
     model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
   },
   quality: {
-    key: process.env.ARK_IMAGE_API_KEY || VISION_API_KEY || '',
-    url: `${VISION_API_BASE}/chat/completions`,
-    model: VISION_MODEL,
+    key: MULTIMODAL_PROVIDER.key,
+    url: `${MULTIMODAL_PROVIDER.base}/chat/completions`,
+    model: MULTIMODAL_PROVIDER.model,
   },
 };
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -249,14 +256,15 @@ function extractJson(text) {
 }
 
 function getProvider(isVision) {
-  return isVision
-    ? {
-      id: 'ark', base: VISION_API_BASE, model: VISION_MODEL, key: VISION_API_KEY, source: '云端多模态大模型',
-      prices: { input: process.env.ARK_INPUT_CNY_PER_MILLION, output: process.env.ARK_OUTPUT_CNY_PER_MILLION, cachedInput: process.env.ARK_CACHED_INPUT_CNY_PER_MILLION },
-    }
-    : {
-      ...TEXT_PROVIDER,
-    };
+  return isVision ? MULTIMODAL_PROVIDER : { ...TEXT_PROVIDER };
+}
+
+function getVisionProviders() {
+  const primary = getProvider(true);
+  if (primary.id !== 'minimax' || !ARK_VISION_PROVIDER.key) return [primary];
+  return primary.base === ARK_VISION_PROVIDER.base && primary.model === ARK_VISION_PROVIDER.model
+    ? [primary]
+    : [primary, ARK_VISION_PROVIDER];
 }
 
 export function validImages(value, maximum = 9) {
@@ -289,15 +297,27 @@ async function requestModel(provider, systemPrompt, content) {
   } finally { clearTimeout(timeout); }
 }
 
+export async function requestModelWithFallback(providers, systemPrompt, content) {
+  let lastError;
+  for (const provider of providers) {
+    try {
+      return { ...(await requestModel(provider, systemPrompt, content)), provider };
+    } catch (error) {
+      lastError = Object.assign(error instanceof Error ? error : new Error(String(error)), { provider });
+    }
+  }
+  throw lastError || new Error('大模型暂时不可用');
+}
+
 async function analyzeWithModel(payload) {
   const isVision = payload.mode === 'photo' || payload.mode === 'chat';
-  const provider = getProvider(isVision);
   const modeLabel = payload.mode === 'photo' ? '照片鉴定' : payload.mode === 'chat' ? '聊天记录鉴定' : '文字鉴定';
   const userText = cleanText(payload.input, payload.mode === 'text' ? '用户未提供有效文字' : '请结合图片内容进行鉴定', 1200);
   const extractedText = cleanText(payload.extractedText, '', 20_000);
   const content = [{ type: 'text', text: `鉴定方式：${modeLabel}\n用户内容：${userText}\n文件提取内容：${extractedText || '无'}\n请严格按要求生成娱乐鉴定 JSON。` }];
   for (const image of validImages(payload.images)) content.push({ type: 'image_url', image_url: { url: image } });
-  const modelResponse = await requestModel(provider, SYSTEM_PROMPT, content);
+  const modelResponse = await requestModelWithFallback(isVision ? getVisionProviders() : [getProvider(false)], SYSTEM_PROMPT, content);
+  const provider = modelResponse.provider;
   const signals = normalizeResult(modelResponse.output);
   const dimensions = normalizeAssessmentDimensions(signals.dimensions);
   const score = calculateJiahaoScore(dimensions);
@@ -315,14 +335,14 @@ async function analyzePkWithModel(payload) {
     images: validImages(participant.images),
   }));
   const isVision = participants.some((participant) => participant.images.length > 0);
-  const provider = getProvider(isVision);
   const content = [];
   participants.forEach((participant, index) => {
     content.push({ type: 'text', text: `\n选手 ${index === 0 ? 'A' : 'B'}\n名称：${participant.name}\n输入类型：${participant.mode}\n文字：${participant.input || '无'}\n文件提取内容：${participant.extractedText || '无'}\n以下图片均属于该选手：` });
     participant.images.forEach((image) => content.push({ type: 'image_url', image_url: { url: image } }));
   });
   content.push({ type: 'text', text: '请严格按要求分别分析并完成综合裁决。' });
-  const modelResponse = await requestModel(provider, PK_SYSTEM_PROMPT, content);
+  const modelResponse = await requestModelWithFallback(isVision ? getVisionProviders() : [getProvider(false)], PK_SYSTEM_PROMPT, content);
+  const provider = modelResponse.provider;
   return {
     data: normalizePkResult(modelResponse.output, participants.map((participant) => participant.name), provider.source === '云端多模态大模型' ? '模型综合裁决 · 多模态' : '模型综合裁决 · 文字'),
     usage: modelResponse.usage,
@@ -363,7 +383,7 @@ async function handleModelRequest(req, res, endpoint, handler) {
   } catch (error) {
     const message = error?.name === 'AbortError' ? '大模型响应超时' : cleanText(error?.message, '服务暂时不可用', 100);
     const statusCode = message.includes('体积') ? 413 : 503;
-    const provider = modelInfo?.provider || getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
+    const provider = modelInfo?.provider || error?.provider || getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
     void observability.recordApiRequest(req, {
       requestId, endpoint, mode: payload?.mode || (endpoint === '/api/pk' ? 'pk' : null), provider: provider.id,
       model: provider.model, statusCode, ok: false, latencyMs: performance.now() - started,
@@ -456,9 +476,9 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'GET' && pathname === '/healthz') return sendJson(res, 200, {
       status: 'ok',
       textModelConfigured: Boolean(TEXT_PROVIDER.key),
-      visionModelConfigured: Boolean(VISION_API_KEY),
+      visionModelConfigured: Boolean(MULTIMODAL_PROVIDER.key),
       textModel: TEXT_PROVIDER.model,
-      visionModel: VISION_MODEL,
+      visionModel: MULTIMODAL_PROVIDER.model,
       imageGeneration: {
         configured: Boolean(IMAGE_CONFIG.volcengine.key),
         provider: 'volcengine',
@@ -516,8 +536,8 @@ export const server = createServer(async (req, res) => {
       }));
       if (req.method === 'GET' && pathname === '/api/admin/costs') return sendJson(res, 200, await observability.costs(range));
       if (req.method === 'GET' && pathname === '/api/admin/status') return sendJson(res, 200, observability.status({
-        textModelConfigured: Boolean(TEXT_PROVIDER.key), visionModelConfigured: Boolean(VISION_API_KEY),
-        adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_PROVIDER.model, visionModel: VISION_MODEL,
+        textModelConfigured: Boolean(TEXT_PROVIDER.key), visionModelConfigured: Boolean(MULTIMODAL_PROVIDER.key),
+        adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_PROVIDER.model, visionModel: MULTIMODAL_PROVIDER.model,
       }));
       return sendJson(res, 404, { error: '后台接口不存在' });
     }

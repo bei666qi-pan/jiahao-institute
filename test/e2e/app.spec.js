@@ -110,6 +110,7 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await page.unroute('**/api/analyze');
     await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '云端忙' }) }));
     await completeTextAssessment(page, '这个底层逻辑其实不复杂，懂的都懂。');
+    await expect(page.getByText('当前使用人数过多，奶娃十分之抱歉')).toBeVisible();
     await expect(page.getByText(/基础成绩/)).toBeVisible();
     await openSection(page, '人格档案', '我的');
     await expect(page.locator('.history-grid button')).toHaveCount(1);
