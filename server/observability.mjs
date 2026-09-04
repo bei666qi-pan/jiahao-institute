@@ -454,16 +454,16 @@ export class Observability {
           from jh_product_events where event_name='league_submission_completed' and visitor_id is not null
           group by visitor_id
         ), returns as (
-          select distinct visitor_id,(created_at at time zone '${SHANGHAI_TIME_ZONE}')::date day
+          select distinct visitor_id,(created_at at time zone '${SHANGHAI_TIME_ZONE}')::date as event_day
           from jh_product_events where event_name='league_submission_completed' and visitor_id is not null
         )
         select
           count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-1)::int eligible_d1,
           count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-1 and exists (
-            select 1 from returns r where r.visitor_id=firsts.visitor_id and r.day=firsts.first_day+1))::int retained_d1,
+            select 1 from returns r where r.visitor_id=firsts.visitor_id and r.event_day=firsts.first_day+1))::int retained_d1,
           count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-7)::int eligible_d7,
           count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-7 and exists (
-            select 1 from returns r where r.visitor_id=firsts.visitor_id and r.day=firsts.first_day+7))::int retained_d7
+            select 1 from returns r where r.visitor_id=firsts.visitor_id and r.event_day=firsts.first_day+7))::int retained_d7
         from firsts where first_day >= ($1 at time zone '${SHANGHAI_TIME_ZONE}')::date
           and first_day < ($2 at time zone '${SHANGHAI_TIME_ZONE}')::date`, [range.start, range.end]),
     ]);
@@ -542,7 +542,7 @@ export class Observability {
   async costs(rangeValue) {
     const range = getRangeConfig(rangeValue);
     const results = await Promise.allSettled([
-      this.query(`select (occurred_at at time zone '${SHANGHAI_TIME_ZONE}')::date day,
+      this.query(`select (occurred_at at time zone '${SHANGHAI_TIME_ZONE}')::date as "day",
         coalesce(sum(input_tokens),0)::bigint input_tokens, coalesce(sum(output_tokens),0)::bigint output_tokens,
         coalesce(sum(cached_input_tokens),0)::bigint cached_input_tokens, coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros,
         count(*)::bigint requests, count(*) filter (where pricing_configured)::bigint priced_requests
