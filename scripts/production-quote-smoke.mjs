@@ -1,9 +1,14 @@
 import { chromium } from '@playwright/test';
+import { QUOTE_SERVICE_VERSION } from '../server/quote.mjs';
 
 const SITE_URL = `${(process.env.PRODUCTION_URL || 'https://jiahao.versecraft.cn').replace(/\/$/, '')}/`;
 const INPUT = '凡人之血';
 const EXPECTED_SOURCE_PREFIX = '云端文字大模型';
-const EXPECTED_SERVICE_VERSION = 5;
+const EXPECTED_SERVICE_VERSION = Number(process.env.EXPECTED_QUOTE_SERVICE_VERSION || QUOTE_SERVICE_VERSION);
+
+if (!Number.isInteger(EXPECTED_SERVICE_VERSION) || EXPECTED_SERVICE_VERSION < 1) {
+  throw new Error('EXPECTED_QUOTE_SERVICE_VERSION 必须是正整数');
+}
 
 let browser;
 try {
