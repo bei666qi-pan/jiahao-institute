@@ -431,6 +431,9 @@ body::before { opacity: .42; }
 @media (max-width: 1180px) {
   :root { --page: calc(100vw - 36px); }
   .editorial-header nav button { min-width: auto; padding-inline: 11px; }
+  .league-first-hero { grid-template-columns: minmax(0, 1.18fr) minmax(360px, .82fr); }
+  .league-first-hero h1 { font-size: clamp(52px, 6vw, 72px); line-height: .92; }
+  .league-first-hero h1 span:last-child { white-space: normal; }
   .result-layout { grid-template-columns: .9fr 1.1fr; }
   .share-card-preview { display: none; }
   .persona-gallery { grid-template-columns: repeat(3, 1fr); }

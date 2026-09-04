@@ -31,6 +31,15 @@ test('手机首屏文案首帧可读且不以长时间空白入场', async ({ pa
   expect(photoOpacity).toBeGreaterThanOrEqual(0.65);
 });
 
+test('平板双栏首屏长标题不会挤进人物图', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.route('**/api/social/session', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, leagueEnabled: true, rooms: [] }) }));
+  await page.goto('/');
+
+  const titleFits = await page.locator('.league-first-hero h1 span:last-child').evaluate((element) => element.scrollWidth <= element.clientWidth);
+  expect(titleFits).toBe(true);
+});
+
 test('邀请链接允许免鉴定加入、交卷后看答案并投票', async ({ page }) => {
   let joined = false;
   let submitted = false;
