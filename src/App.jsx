@@ -54,7 +54,7 @@ export default function App() {
   const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'hao');
   const [result, setResult] = useState(null);
   const mediaTask = useMemo(() => createMediaGenerationTask({
-    generateImage: (input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(240_000) }),
+    generateImage: (input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(360_000) }),
     createVideo: (input) => postJson('/api/videos/tasks', input),
     getVideoTask: (id) => apiRequest(`/api/videos/tasks/${encodeURIComponent(id)}`),
   }), []);
