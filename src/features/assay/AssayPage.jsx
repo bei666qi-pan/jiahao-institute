@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
+import { AiProgress } from '../../components/AiProgress';
 import { prepareFiles, validateFiles } from '../../fileProcessing';
 import { makeFallbackAssessment, upgradeClientResult } from '../../validation';
 import { trackProductEvent } from '../../telemetry';
@@ -19,6 +20,7 @@ export function AssayPage({ onComplete, onNavigate }) {
   const [files, setFiles] = useState([]);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [startedAt, setStartedAt] = useState(null);
   const [error, setError] = useState('');
   const fileRef = useRef(null);
 
@@ -46,6 +48,7 @@ export function AssayPage({ onComplete, onNavigate }) {
     if (mode !== 'text' && !files.length) return setError(mode === 'photo' ? '先放一张照片进来。' : '先选择聊天截图或文档。');
     if (!consent) return setError('请先确认拥有内容使用权并同意本次娱乐分析。');
     setBusy(true);
+    setStartedAt(Date.now());
     trackProductEvent('assessment_started', { mode });
     let result;
     try {
@@ -90,6 +93,7 @@ export function AssayPage({ onComplete, onNavigate }) {
           <label className="consent-row"><input aria-label="同意将内容用于本次娱乐分析" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>我确认有权使用这些内容，并同意用于本次娱乐鉴定。</span></label>
           {error ? <p className="form-message error" role="alert">{error}</p> : null}
           <button type="button" className="primary-button assay-submit" disabled={busy} onClick={submit}>{busy ? '正在看看你的豪气…' : '开始鉴定'}<Icon name="arrow"/></button>
+          {busy ? <AiProgress label="AI 鉴定" kind="analysis" startedAt={startedAt} /> : null}
         </div>
       </div>
       <aside className="assay-editorial-photo"><img src="/assets/jiahao/hao-assay-editorial.webp" alt="靠在旧海报墙前的嘉豪" width="960" height="1200" loading="eager"/><p>好玩就行，不用当真。</p><button type="button" onClick={() => onNavigate('lab')}>想玩奶龙？去抽象实验室 <Icon name="arrow" size={17}/></button></aside>
