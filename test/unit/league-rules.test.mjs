@@ -8,6 +8,7 @@ import {
   digestRecoveryCode,
   generateRecoveryCode,
   getLeaguePrompt,
+  getLeaguePromptGuidance,
   normalizeLeagueJudgement,
   normalizeLeaguePromptOverride,
   normalizeLeagueAnswer,
@@ -20,6 +21,12 @@ test('联赛题库包含 28 道编辑题并按嘉豪和奶龙交替', () => {
   assert.equal(LEAGUE_PROMPTS[0].character, 'jiahao');
   assert.equal(LEAGUE_PROMPTS[1].character, 'nailoong');
   assert.ok(LEAGUE_PROMPTS.every((item) => item.text.length >= 8));
+  assert.ok(LEAGUE_PROMPTS.every((item) => item.goal.length >= 6));
+  assert.ok(LEAGUE_PROMPTS.every((item) => item.angles.length === 3));
+  assert.ok(LEAGUE_PROMPTS.every((item) => item.twist.length >= 4));
+  for (let week = 0; week < 4; week += 1) {
+    assert.equal(new Set(LEAGUE_PROMPTS.slice(week * 7, week * 7 + 7).map((item) => item.mode)).size, 7);
+  }
 });
 
 test('每日题按上海自然日稳定轮换', () => {
@@ -28,6 +35,14 @@ test('每日题按上海自然日稳定轮换', () => {
   assert.equal(beforeMidnight.date, '2026-09-04');
   assert.equal(afterMidnight.date, '2026-09-05');
   assert.notEqual(beforeMidnight.id, afterMidnight.id);
+});
+
+test('旧轮次和自定义题也有不代写答案的破题引导', () => {
+  assert.equal(getLeaguePromptGuidance('league-prompt-v2-01').mode, '接梗局');
+  assert.equal(getLeaguePromptGuidance('league-prompt-01').mode, '今日反应局');
+  const fallback = getLeaguePromptGuidance('override-2026-09-04', 'nailoong');
+  assert.equal(fallback.mode, '今日反应局');
+  assert.equal(fallback.angles.length, 3);
 });
 
 test('赛季窗口固定七个上海自然日', () => {
@@ -83,6 +98,7 @@ test('赛季奖项按每次提交等权计算 AI 均分，不被票数重复放�
     { memberId: 'b', nickname: '乙', aiScore: 49, voteCount: 4 },
   ];
   const awards = buildLeagueAwards(standings, rows);
+  assert.equal(awards.find((award) => award.key === 'champion').title, '嘉豪之神');
   assert.deepEqual(awards.find((award) => award.key === 'hardest').names, ['甲']);
   assert.deepEqual(awards.find((award) => award.key === 'popular').names, ['甲']);
 });

@@ -15,7 +15,7 @@ test('豪气宇宙与抽象实验室并行存在且豪气语录、双人PK可完
   const isMobile = page.viewportSize()?.width <= 760;
   await expect(page.getByRole('navigation', { name: '主导航' })).toContainText(isMobile ? '豪气' : '豪气宇宙');
   await expect(page.getByRole('navigation', { name: '主导航' })).toContainText(isMobile ? '实验室' : '抽象实验室');
-  await expect(page.getByRole('heading', { name: '每天一句，七天决出群冠军' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' })).toBeVisible();
   await expect(page.getByText('JIAHAO SYSTEM / ORIGINAL')).toHaveCount(0);
   await expect(page.getByText(/系统|原版|保留|一直都在|并行存在/)).toHaveCount(0);
 

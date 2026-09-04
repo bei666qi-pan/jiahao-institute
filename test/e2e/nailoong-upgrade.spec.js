@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('根路径以豪气宇宙为首页并把嘉豪与奶龙玩法分开', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '每天一句，七天决出群冠军' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' })).toBeVisible();
   await expect(page.getByRole('navigation')).toContainText(/抽象实验室|实验室/);
   await expect(page.getByText('奶龙指数')).toHaveCount(0);
   const buttonName = page.viewportSize()?.width <= 760 ? '鉴定' : '嘉豪鉴定';

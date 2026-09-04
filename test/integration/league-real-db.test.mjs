@@ -71,6 +71,10 @@ test('真实数据库中三方权限、交卷解锁与改投链路成立', { ski
   assert.equal(joined.response.status, 200);
   const beforeAnswer = await request(`/api/social/rooms/${code}`, { cookie: guestCookie });
   assert.deepEqual(beforeAnswer.body.entries, []);
+  assert.match(beforeAnswer.body.round.mode, /局$/);
+  assert.ok(beforeAnswer.body.round.goal.length >= 6);
+  assert.ok(beforeAnswer.body.round.twist.length >= 4);
+  assert.equal(beforeAnswer.body.round.angles.length, 3);
 
   const ownerKey = crypto.randomUUID();
   const ownerSubmissions = await Promise.all([

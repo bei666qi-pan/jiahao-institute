@@ -61,7 +61,7 @@ async function openSection(page, desktopName, mobileName = desktopName) {
 }
 
 async function completeTextAssessment(page, text = '也没什么，只是习惯一个人处理。', { expectResult = true } = {}) {
-  if (await page.getByRole('heading', { name: '每天一句，七天决出群冠军' }).isVisible().catch(() => false)) {
+  if (await page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' }).isVisible().catch(() => false)) {
     await openSection(page, '嘉豪鉴定', '鉴定');
   }
   await page.getByRole('tab', { name: '文字' }).click();
@@ -78,7 +78,7 @@ test.describe('嘉豪鉴定所升级全链路', () => {
   });
 
   test('五模块导航与人格档案是正式页面', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: '每天一句，七天决出群冠军' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' })).toBeVisible();
     await openSection(page, '人格档案', '我的');
     await expect(page.getByRole('heading', { name: '人格档案' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '嘉豪物种' })).toBeVisible();

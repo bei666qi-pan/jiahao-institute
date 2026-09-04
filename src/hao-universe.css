@@ -335,9 +335,20 @@ body::before { opacity: .42; }
 .league-daily, .league-join-card { padding: clamp(22px,4vw,42px); }
 .league-daily { min-height: 530px; }
 .league-daily > header { display: flex; justify-content: space-between; gap: 16px; color: var(--blue); font-weight: 900; }
+.league-daily > header > div { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .league-daily > header span:first-child { width: max-content; padding: 5px 9px; background: var(--blue); color: white; box-shadow: 5px 5px 0 var(--ink); transform: rotate(-1deg); }
+.league-daily > header em { color: var(--muted); font-size: 11px; font-style: normal; letter-spacing: .08em; }
 .league-daily > header span:last-child { color: var(--muted); }
-.league-daily > h2, .league-join-card h2 { margin: 30px 0 36px; max-width: 16em; font-size: clamp(38px,4.5vw,66px); font-weight: 1000; line-height: 1.05; letter-spacing: -.055em; }
+.league-daily > h2, .league-join-card h2 { margin: 30px 0 22px; max-width: 16em; font-size: clamp(38px,4.5vw,66px); font-weight: 1000; line-height: 1.05; letter-spacing: -.055em; }
+.league-play-brief { display: grid; gap: 7px; margin: 0 0 24px; border-left: 5px solid var(--yellow); padding: 14px 16px; background: rgba(255,255,255,.5); }
+.league-play-brief > small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: .12em; }
+.league-play-brief > p { margin: 0; color: var(--ink); font-size: 14px; font-weight: 750; line-height: 1.55; }
+.league-play-brief > strong { width: max-content; max-width: 100%; margin-top: 3px; padding: 5px 8px; background: var(--yellow); font-size: 12px; }
+.league-play-brief > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 3px; }
+.league-play-brief > em { color: var(--muted); font-size: 11px; font-style: normal; }
+.league-play-brief button { min-height: 36px; border: 1px solid var(--ink); padding: 0 12px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; transition: transform 150ms ease, background 150ms ease, color 150ms ease; }
+.league-play-brief button:hover { transform: translateY(-1px); }
+.league-play-brief button[aria-pressed="true"] { border-color: var(--blue); background: var(--blue); color: white; }
 .league-join-card { max-width: 820px; margin: 32px auto; border: 2px solid var(--ink); box-shadow: 10px 10px 0 var(--blue); }
 .league-join-card > span { color: var(--blue); font-size: 12px; font-weight: 900; letter-spacing: .14em; }
 .league-join-card label { display: grid; gap: 7px; margin: 24px 0 12px; font-weight: 900; }
@@ -392,18 +403,18 @@ body::before { opacity: .42; }
 .league-privacy { margin: 0; padding: 15px 20px; border: 2px solid var(--ink); background: var(--ink); color: rgba(255,255,255,.82); }
 
 @keyframes league-copy-in {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: .92; transform: translateY(7px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes league-photo-in {
-  from { opacity: 0; transform: translateX(24px) rotate(2deg); clip-path: inset(0 0 100% 0); }
+  from { opacity: .78; transform: translateX(10px) rotate(1.2deg); clip-path: inset(0 0 12% 0); }
   to { opacity: 1; transform: translateX(0) rotate(.8deg); clip-path: inset(0); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .league-first-hero .hao-hero-copy { animation: league-copy-in 560ms cubic-bezier(.22,1,.36,1) both; }
-  .league-first-hero .hao-hero-media { animation: league-photo-in 720ms 90ms cubic-bezier(.22,1,.36,1) both; }
+  .league-first-hero .hao-hero-copy { animation: league-copy-in 300ms cubic-bezier(.22,1,.36,1) both; }
+  .league-first-hero .hao-hero-media { animation: league-photo-in 520ms cubic-bezier(.22,1,.36,1) both; }
   .league-progress .active { animation: league-copy-in 380ms cubic-bezier(.22,1,.36,1) both; }
 }
 .persona-gallery article.locked img, .persona-gallery article.locked .jiahao-portrait { filter: grayscale(1) contrast(.75); opacity: .3; }
@@ -420,6 +431,9 @@ body::before { opacity: .42; }
 @media (max-width: 1180px) {
   :root { --page: calc(100vw - 36px); }
   .editorial-header nav button { min-width: auto; padding-inline: 11px; }
+  .league-first-hero { grid-template-columns: minmax(0, 1.18fr) minmax(360px, .82fr); }
+  .league-first-hero h1 { font-size: clamp(52px, 6vw, 72px); line-height: .92; }
+  .league-first-hero h1 span:last-child { white-space: normal; }
   .result-layout { grid-template-columns: .9fr 1.1fr; }
   .share-card-preview { display: none; }
   .persona-gallery { grid-template-columns: repeat(3, 1fr); }
@@ -547,7 +561,9 @@ body::before { opacity: .42; }
   .league-game-layout { border-right-width: 2px; }
   .league-game-main { border-right: 0; }
   .league-daily, .league-standings, .league-entry-section, .league-join-card { border-radius: 0; }
-  .league-daily h2, .league-join-card h2 { font-size: 38px; }
+  .league-daily h2, .league-join-card h2 { font-size: 34px; line-height: 1.08; }
+  .league-play-brief { margin-bottom: 18px; padding: 12px; }
+  .league-play-brief button { flex: 1 1 auto; }
   .league-daily { min-height: 0; }
   .league-entry-section { padding: 16px; }
   .league-entry-grid > article { grid-template-columns: 58px 1fr; padding: 16px; }
