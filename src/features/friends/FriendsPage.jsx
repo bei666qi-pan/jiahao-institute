@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest, postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
 import { makeSocialResultPayload } from '../../validation';
@@ -24,13 +24,22 @@ function LeagueRoom({ data, roomCode, nickname, onNickname, busy, error, notice,
   const [consent, setConsent] = useState(false);
   const [shareAnswer, setShareAnswer] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [idempotencyKey] = useState(makeIdempotencyKey);
   const [localError, setLocalError] = useState('');
   const [working, setWorking] = useState(false);
   const room = data?.room;
   const round = data?.round;
   const season = data?.season;
+  const submissionScope = `${season?.number || 0}:${round?.date || 'none'}`;
+  const idempotencyKey = useMemo(makeIdempotencyKey, [submissionScope]);
   const currentDay = Math.min(7, Math.max(1, Number(season?.day) || 1));
+
+  useEffect(() => {
+    setAnswer('');
+    setConsent(false);
+    setShareAnswer(false);
+    setConfirming(false);
+    setLocalError('');
+  }, [submissionScope]);
 
   const submit = async () => {
     if (!confirming) {
@@ -71,9 +80,9 @@ function LeagueRoom({ data, roomCode, nickname, onNickname, busy, error, notice,
     finally { setWorking(false); }
   };
 
-  const retryJudgement = async () => {
+  const retryJudgement = async (submissionId = null) => {
     setWorking(true); setLocalError('');
-    try { await postJson(`/api/social/rooms/${roomCode}/league/retry`, {}); await onReload(); }
+    try { await postJson(`/api/social/rooms/${roomCode}/league/retry`, submissionId ? { submissionId } : {}); await onReload(); }
     catch (nextError) { setLocalError(nextError.message); }
     finally { setWorking(false); }
   };
@@ -105,6 +114,7 @@ function LeagueRoom({ data, roomCode, nickname, onNickname, busy, error, notice,
           return <span key={day} className={state} aria-current={state === 'active' ? 'step' : undefined}><b>{day}</b><small>{state === 'active' ? '今天' : state === 'done' ? '完成' : day === currentDay + 1 ? '明天' : `第 ${day} 天`}</small></span>;
         })}
       </nav>
+      {data.pendingJudgement && data.pendingJudgement.roundDate !== round?.date ? <section className="league-pending-banner" role="status"><div><strong>{data.pendingJudgement.roundDate} 的答案还在等待 AI 重判</strong><span>原句已保留，补判成功后会重新计算当天积分。</span></div><button type="button" className="outline-button" disabled={working} onClick={() => retryJudgement(data.pendingJudgement.submissionId)}>补判上一局</button></section> : null}
       <div className="league-game-layout">
         <div className="league-game-main">
           <section className={`league-daily ${round?.character === 'nailoong' ? 'nailoong' : 'jiahao'}`}><header><span>{round?.character === 'nailoong' ? '奶龙今日题' : '嘉豪今日题'}</span><small>{round?.date}</small></header><h2>{round?.prompt || '今天已结算'}</h2>

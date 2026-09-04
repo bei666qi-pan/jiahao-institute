@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   LEAGUE_PROMPTS,
   addLeagueScores,
+  buildLeagueAwards,
   buildSeasonWindow,
   digestRecoveryCode,
   generateRecoveryCode,
@@ -69,6 +70,21 @@ test('最高票答案获得 1 分人气奖且并列时共同获得', () => {
     { submissionId: 'b', popularityBonus: 1 },
     { submissionId: 'c', popularityBonus: 0 },
   ]);
+});
+
+test('赛季奖项按每次提交等权计算 AI 均分，不被票数重复放大', () => {
+  const standings = [
+    { memberId: 'a', nickname: '甲', seasonPoints: 8 },
+    { memberId: 'b', nickname: '乙', seasonPoints: 7 },
+  ];
+  const rows = [
+    { memberId: 'a', nickname: '甲', aiScore: 100, voteCount: 0 },
+    { memberId: 'a', nickname: '甲', aiScore: 0, voteCount: 10 },
+    { memberId: 'b', nickname: '乙', aiScore: 49, voteCount: 4 },
+  ];
+  const awards = buildLeagueAwards(standings, rows);
+  assert.deepEqual(awards.find((award) => award.key === 'hardest').names, ['甲']);
+  assert.deepEqual(awards.find((award) => award.key === 'popular').names, ['甲']);
 });
 
 test('联赛答案限制 2 到 120 字并拒绝联系方式和高风险内容', () => {

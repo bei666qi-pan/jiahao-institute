@@ -91,6 +91,33 @@ export function rankLeagueRound(entries = []) {
   });
 }
 
+export function buildLeagueAwards(standings = [], submissionRows = []) {
+  if (!standings.length) return [];
+  const stats = new Map();
+  for (const row of submissionRows) {
+    const memberId = row.memberId ?? row.member_id;
+    if (!memberId || row.aiScore === null || row.aiScore === undefined) continue;
+    const current = stats.get(memberId) || { nickname: row.nickname || '', scores: [], votes: 0 };
+    current.scores.push(Number(row.aiScore ?? row.ai_score) || 0);
+    current.votes += Math.max(0, Number(row.voteCount ?? row.vote_count) || 0);
+    stats.set(memberId, current);
+  }
+  const normalized = [...stats.entries()].map(([memberId, value]) => ({
+    memberId,
+    nickname: value.nickname || standings.find((item) => item.memberId === memberId)?.nickname || '',
+    averageAi: value.scores.reduce((sum, score) => sum + score, 0) / value.scores.length,
+    votes: value.votes,
+  }));
+  const topPoints = Math.max(...standings.map((item) => Number(item.seasonPoints) || 0));
+  const topAi = normalized.length ? Math.max(...normalized.map((item) => item.averageAi)) : null;
+  const topVotes = normalized.length ? Math.max(...normalized.map((item) => item.votes)) : 0;
+  return [
+    { key: 'champion', title: '群冠军', names: standings.filter((item) => Number(item.seasonPoints) === topPoints).map((item) => item.nickname) },
+    { key: 'hardest', title: '最佳嘴硬', names: topAi === null ? [] : normalized.filter((item) => item.averageAi === topAi).map((item) => item.nickname) },
+    { key: 'popular', title: '最受欢迎', names: topVotes > 0 ? normalized.filter((item) => item.votes === topVotes).map((item) => item.nickname) : [] },
+  ];
+}
+
 const CONTACT_PATTERN = /(?:wxid[_-]?[a-z0-9]{6,}|(?:微信|微信号|qq|q号|手机号|电话)\s*[:：]?\s*[a-z0-9_-]{5,}|1[3-9]\d{9})/i;
 const HIGH_RISK_PATTERN = /(?:杀了你|弄死你|死全家|去死|自杀|约炮|强奸)/i;
 

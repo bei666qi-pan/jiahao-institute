@@ -3,6 +3,7 @@ import pg from 'pg';
 import { parseCookies } from './observability.mjs';
 import {
   buildSeasonWindow,
+  buildLeagueAwards,
   createLeagueJudge,
   digestRecoveryCode,
   generateRecoveryCode,
@@ -356,16 +357,7 @@ export class SocialService {
         join jh_league_seasons ls on ls.season_id=lr.season_id
         where ls.room_id=$1 and lr.status='open' and lr.round_date<$2 for update`, [roomId, today]);
       for (const round of rounds.rows) {
-        const submissions = await client.query(`select s.submission_id, s.ai_score,
-          count(v.submission_id)::int vote_count from jh_league_submissions s
-          left join jh_league_votes v on v.submission_id=s.submission_id
-          where s.round_id=$1 and s.judge_status='ready' and s.hidden=false
-          group by s.submission_id`, [round.round_id]);
-        const ranked = rankLeagueRound(submissions.rows.map((row) => ({ submissionId: row.submission_id, aiScore: row.ai_score, voteCount: row.vote_count })));
-        for (const entry of ranked) {
-          await client.query(`update jh_league_submissions set finalized_points=$2, popularity_bonus=$3
-            where submission_id=$1`, [entry.submissionId, entry.seasonPoints, entry.popularityBonus]);
-        }
+        await this.finalizeLeagueRound(client, round.round_id);
         await client.query("update jh_league_rounds set status='finished', finalized_at=now() where round_id=$1", [round.round_id]);
       }
       await client.query(`update jh_league_seasons set status='finished', finished_at=coalesce(finished_at,now())
@@ -375,6 +367,19 @@ export class SocialService {
       await client.query('rollback');
       throw error;
     } finally { client.release(); }
+  }
+
+  async finalizeLeagueRound(client, roundId) {
+    const submissions = await client.query(`select s.submission_id, s.ai_score,
+      count(v.submission_id)::int vote_count from jh_league_submissions s
+      left join jh_league_votes v on v.submission_id=s.submission_id
+      where s.round_id=$1 and s.judge_status='ready' and s.hidden=false
+      group by s.submission_id`, [roundId]);
+    const ranked = rankLeagueRound(submissions.rows.map((row) => ({ submissionId: row.submission_id, aiScore: row.ai_score, voteCount: row.vote_count })));
+    for (const entry of ranked) {
+      await client.query(`update jh_league_submissions set finalized_points=$2, popularity_bonus=$3
+        where submission_id=$1`, [entry.submissionId, entry.seasonPoints, entry.popularityBonus]);
+    }
   }
 
   async createLeagueRoom(visitorId, payload) {
@@ -508,22 +513,18 @@ export class SocialService {
     })) : [];
     let awards = [];
     if (isMember && season.status === 'finished' && standings.length) {
-      const stats = await this.query(`select lm.member_id,lm.nickname,
-        coalesce(avg(s.ai_score) filter (where s.judge_status='ready'),0)::numeric average_ai,
-        count(v.submission_id)::int votes
+      const stats = await this.query(`select lm.member_id,lm.nickname,s.ai_score,
+        (select count(*)::int from jh_league_votes v where v.submission_id=s.submission_id) vote_count
         from jh_league_members lm left join jh_league_submissions s on s.member_id=lm.member_id
           and exists (select 1 from jh_league_rounds lr where lr.round_id=s.round_id and lr.season_id=$2)
-        left join jh_league_votes v on v.submission_id=s.submission_id
-        where lm.room_id=$1 group by lm.member_id,lm.nickname`, [room.room_id, season.season_id]);
-      const byAi = [...stats.rows].sort((a, b) => Number(b.average_ai) - Number(a.average_ai));
-      const byVotes = [...stats.rows].sort((a, b) => Number(b.votes) - Number(a.votes));
-      const topPoints = standings[0].seasonPoints;
-      awards = [
-        { key: 'champion', title: '群冠军', names: standings.filter((item) => item.seasonPoints === topPoints).map((item) => item.nickname) },
-        { key: 'hardest', title: '最佳嘴硬', names: byAi.length ? [byAi[0].nickname] : [] },
-        { key: 'popular', title: '最受欢迎', names: byVotes.length && Number(byVotes[0].votes) > 0 ? byVotes.filter((item) => item.votes === byVotes[0].votes).map((item) => item.nickname) : [] },
-      ];
+        where lm.room_id=$1 and (s.submission_id is null or s.judge_status='ready')`, [room.room_id, season.season_id]);
+      awards = buildLeagueAwards(standings, stats.rows);
     }
+    const pendingJudgement = isMember ? (await this.query(`select s.submission_id,lr.round_date
+      from jh_league_submissions s join jh_league_rounds lr on lr.round_id=s.round_id
+      join jh_league_seasons ls on ls.season_id=lr.season_id
+      where ls.room_id=$1 and s.member_id=$2 and s.judge_status in ('pending','failed')
+      order by lr.round_date desc limit 1`, [room.room_id, member.member_id])).rows[0] : null;
     return {
       room: {
         code: room.code, name: room.name, roomType: 'league', memberLimit: Number(room.member_limit),
@@ -538,8 +539,9 @@ export class SocialService {
       round: round ? {
         date: dateKey(round.round_date), promptId: round.prompt_id, character: round.character,
         prompt: round.prompt_text, status: round.status, hasSubmitted: ownSubmission?.judge_status === 'ready',
-        judgementStatus: ownSubmission?.judge_status || null,
+        judgementStatus: ownSubmission?.judge_status || null, submissionId: ownSubmission?.submission_id || null,
       } : null,
+      pendingJudgement: pendingJudgement ? { submissionId: pendingJudgement.submission_id, roundDate: dateKey(pendingJudgement.round_date) } : null,
       entries: isMember && ownSubmission?.judge_status === 'ready' ? entries : [],
       standings,
       awards,
@@ -573,23 +575,35 @@ export class SocialService {
     return this.retryLeagueJudgement(code, visitorId);
   }
 
-  async retryLeagueJudgement(code, visitorId) {
-    const { room, member, season, round } = await this.getLeagueContext(code, visitorId);
-    if (!member || !round) throw Object.assign(new Error('当前不能重判'), { statusCode: 403 });
+  async retryLeagueJudgement(code, visitorId, payload = {}) {
+    const requestedId = payload.submissionId ? String(payload.submissionId) : null;
+    if (requestedId && !UUID_RE.test(requestedId)) throw Object.assign(new Error('重判目标无效'), { statusCode: 400 });
     const client = await this.pool.connect();
     let locked = false;
+    let lockKey = '';
     try {
-      const lock = await client.query('select pg_try_advisory_lock(hashtext($1)) locked', [`league-judge:${round.round_id}:${member.member_id}`]);
+      const target = await client.query(`select s.submission_id,s.answer_text,s.judge_status,s.member_id,
+        lr.round_id,lr.prompt_text,lr.character,lr.status round_status,ls.season_id,r.room_id
+        from jh_league_submissions s join jh_league_members lm on lm.member_id=s.member_id
+        join jh_league_rounds lr on lr.round_id=s.round_id join jh_league_seasons ls on ls.season_id=lr.season_id
+        join jh_rooms r on r.room_id=ls.room_id
+        where r.code=$1 and lm.visitor_id=$2 and s.judge_status in ('pending','failed')
+          and ($3::uuid is null or s.submission_id=$3::uuid)
+        order by lr.round_date desc limit 1`, [code, visitorId, requestedId]);
+      if (!target.rowCount) throw Object.assign(new Error('还没有可重判的答案'), { statusCode: 404 });
+      const submission = target.rows[0];
+      lockKey = `league-judge:${submission.round_id}:${submission.member_id}`;
+      const lock = await client.query('select pg_try_advisory_lock(hashtext($1)) locked', [lockKey]);
       locked = Boolean(lock.rows[0]?.locked);
       if (!locked) return this.leagueRoom(code, visitorId);
       const existing = await client.query(`select submission_id,answer_text,judge_status from jh_league_submissions
-        where round_id=$1 and member_id=$2`, [round.round_id, member.member_id]);
+        where submission_id=$1`, [submission.submission_id]);
       if (!existing.rowCount) throw Object.assign(new Error('还没有可重判的答案'), { statusCode: 404 });
       if (existing.rows[0].judge_status === 'ready') return this.leagueRoom(code, visitorId);
       let judged;
       try {
         await client.query("update jh_league_submissions set judge_status='pending' where submission_id=$1", [existing.rows[0].submission_id]);
-        judged = await this.judgeLeagueAnswer({ prompt: round.prompt_text, answer: existing.rows[0].answer_text, character: round.character });
+        judged = await this.judgeLeagueAnswer({ prompt: submission.prompt_text, answer: existing.rows[0].answer_text, character: submission.character });
       } catch (error) {
         await client.query("update jh_league_submissions set judge_status='failed' where submission_id=$1", [existing.rows[0].submission_id]);
         throw Object.assign(new Error('AI 暂时没判完，答案已保留，可稍后重试'), { statusCode: 503, code: 'LEAGUE_JUDGE_PENDING', cause: error });
@@ -602,18 +616,19 @@ export class SocialService {
       await client.query(`update jh_league_submissions set judge_status='ready',ai_score=$2,tag=$3,verdict=$4,judged_at=now()
         where submission_id=$1`, [existing.rows[0].submission_id, judged.data.score, judged.data.tag, judged.data.verdict]);
       const played = await client.query(`select count(*)::int count from jh_league_submissions s
-        join jh_league_rounds lr on lr.round_id=s.round_id where s.member_id=$1 and lr.season_id=$2 and s.judge_status='ready'`, [member.member_id, season.season_id]);
+        join jh_league_rounds lr on lr.round_id=s.round_id where s.member_id=$1 and lr.season_id=$2 and s.judge_status='ready'`, [submission.member_id, submission.season_id]);
       const count = Number(played.rows[0]?.count || 0);
       const keys = [`tag:${judged.data.tag}`, ...(count >= 1 ? ['league:first'] : []), ...(count >= 3 ? ['league:streak-3'] : []), ...(count >= 7 ? ['league:season-7'] : [])];
       for (const key of keys) await client.query(`insert into jh_league_unlocks (visitor_id,unlock_key) values ($1,$2) on conflict do nothing`, [visitorId, key]);
-      await client.query("update jh_rooms set expires_at=now()+interval '30 days',updated_at=now() where room_id=$1", [room.room_id]);
-      await client.query('update jh_league_members set last_active_at=now() where member_id=$1', [member.member_id]);
+      if (submission.round_status === 'finished') await this.finalizeLeagueRound(client, submission.round_id);
+      await client.query("update jh_rooms set expires_at=now()+interval '30 days',updated_at=now() where room_id=$1", [submission.room_id]);
+      await client.query('update jh_league_members set last_active_at=now() where member_id=$1', [submission.member_id]);
       await client.query('commit');
     } catch (error) {
       try { await client.query('rollback'); } catch { /* no active transaction */ }
       throw error;
     } finally {
-      if (locked) await client.query('select pg_advisory_unlock(hashtext($1))', [`league-judge:${round.round_id}:${member.member_id}`]).catch(() => {});
+      if (locked) await client.query('select pg_advisory_unlock(hashtext($1))', [lockKey]).catch(() => {});
       client.release();
     }
     return this.leagueRoom(code, visitorId);
@@ -735,10 +750,10 @@ export class SocialService {
     await this.query(`update jh_league_submissions s set answer_text=null,answer_deleted_at=now()
       from jh_league_rounds lr join jh_league_seasons ls on ls.season_id=lr.season_id
       where s.round_id=lr.round_id and s.answer_text is not null
-        and ls.end_date <= (now() at time zone 'Asia/Shanghai')::date - 7`);
+        and ls.end_date < (now() at time zone 'Asia/Shanghai')::date - 7`);
     await this.query(`delete from jh_league_votes v using jh_league_rounds lr,jh_league_seasons ls
       where v.round_id=lr.round_id and lr.season_id=ls.season_id
-        and ls.end_date <= (now() at time zone 'Asia/Shanghai')::date - 7`);
+        and ls.end_date < (now() at time zone 'Asia/Shanghai')::date - 7`);
     return true;
   }
 
@@ -1015,7 +1030,7 @@ export class SocialService {
         const payload = action === 'next-season' ? {} : await readJson(req);
         let result;
         if (action === 'submit') result = await this.submitLeagueAnswer(code, visitorId, payload);
-        else if (action === 'retry') result = await this.retryLeagueJudgement(code, visitorId);
+        else if (action === 'retry') result = await this.retryLeagueJudgement(code, visitorId, payload);
         else if (action === 'vote') result = await this.voteLeagueAnswer(code, visitorId, payload);
         else if (action === 'report') result = await this.reportLeagueAnswer(code, visitorId, payload);
         else if (action === 'moderate') result = await this.moderateLeagueAnswer(code, visitorId, payload);

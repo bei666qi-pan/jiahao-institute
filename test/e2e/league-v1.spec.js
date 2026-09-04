@@ -85,3 +85,44 @@ test('联赛房在手机上保持单列且没有横向溢出', async ({ page }) 
   await expect(page.getByRole('navigation', { name: '七日赛季进度' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
+
+test('原页面直接开启下一季时会生成新的交卷幂等凭据', async ({ page }) => {
+  let phase = 'first';
+  const keys = [];
+  await page.route('**/api/social/rooms/H7K9P2Q**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/league/submit')) {
+      keys.push((await request.postDataJSON()).idempotencyKey);
+      phase = phase === 'first' ? 'finished' : 'second-submitted';
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    }
+    if (request.method() === 'POST' && path.endsWith('/league/next-season')) {
+      phase = 'second';
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    }
+    const finished = phase === 'finished';
+    const second = phase === 'second' || phase === 'second-submitted';
+    const body = {
+      ...baseRoom,
+      room: { ...baseRoom.room, isOwner: true },
+      isMember: true,
+      member: { memberId: '11111111-1111-4111-8111-111111111111', nickname: '小龙' },
+      season: { ...baseRoom.season, number: second ? 2 : 1, status: finished ? 'finished' : 'active' },
+      round: { ...baseRoom.round, date: second ? '2026-09-11' : '2026-09-04', hasSubmitted: phase === 'second-submitted' },
+      entries: [], standings: [], awards: finished ? [{ key: 'champion', title: '群冠军', names: ['小龙'] }] : [],
+    };
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+
+  await page.goto('/r/H7K9P2Q');
+  for (const answer of ['第一季一句话', '第二季一句话']) {
+    await page.getByLabel('今日答案').fill(answer);
+    await page.getByLabel('同意联赛答案公开规则').check();
+    await page.getByRole('button', { name: '预览交卷' }).click();
+    await page.getByRole('button', { name: '确认交卷' }).click();
+    if (keys.length === 1) await page.getByRole('button', { name: '原群开启下一季' }).click();
+  }
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).not.toBe(keys[1]);
+});

@@ -1,10 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AiConfigService, openSecret, sealSecret, testAiConnectivity } from '../../server/ai-config.mjs';
+import { AiConfigService, normalizeAiConfig, openSecret, sealSecret, testAiConnectivity } from '../../server/ai-config.mjs';
 
 test('图片或视频连通测试不会把不存在的地址误判为成功', async () => {
   const config = { slot: 'image', provider: 'volcengine', baseUrl: 'https://api.example/missing', model: 'image-1', apiKey: 'valid-key', options: {} };
   await assert.rejects(testAiConnectivity(config, async () => new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } })), /地址不存在/);
+});
+
+test('图片与视频连通测试拒绝所有非成功响应', async () => {
+  for (const [slot, provider] of [['image', 'volcengine'], ['video', 'minimax']]) {
+    for (const status of [400, 405, 422, 429]) {
+      const config = {
+        slot, provider, baseUrl: `https://api.example/${slot}`, model: `${slot}-1`, apiKey: 'valid-key',
+        options: slot === 'video' ? { queryUrl: 'https://api.example/video/query', fileUrl: 'https://api.example/files' } : {},
+      };
+      await assert.rejects(testAiConnectivity(config, async () => new Response('{}', { status })), /连通测试失败/);
+    }
+  }
+});
+
+test('图片与视频连通测试发起真实最小生成并校验供应商结果结构', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    const payload = url.endsWith('/image') ? { data: [{ url: 'https://cdn.example/probe.jpg' }] } : { task_id: 'probe-task-1', base_resp: { status_code: 0 } };
+    return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  await testAiConnectivity({ slot: 'image', provider: 'volcengine', baseUrl: 'https://api.example/image', model: 'image-1', apiKey: 'valid-key', options: {} }, fetchImpl);
+  await testAiConnectivity({ slot: 'video', provider: 'minimax', baseUrl: 'https://api.example/video', model: 'video-1', apiKey: 'valid-key', options: {} }, fetchImpl);
+  assert.deepEqual(calls.map((call) => call.init.method), ['POST', 'POST']);
+  assert.deepEqual(calls.map((call) => call.body.model), ['image-1', 'video-1']);
+});
+
+test('图片和视频槽位只接受运行时真正支持的供应商', () => {
+  assert.equal(normalizeAiConfig('image', { provider: 'volcengine', baseUrl: 'https://api.example/images', model: 'image-1', apiKey: 'valid-key' }).provider, 'volcengine');
+  assert.equal(normalizeAiConfig('video', { provider: 'minimax', baseUrl: 'https://api.example/video', queryUrl: 'https://api.example/video/query', fileUrl: 'https://api.example/files', model: 'video-1', apiKey: 'valid-key' }).provider, 'minimax');
+  assert.throws(() => normalizeAiConfig('image', { provider: 'minimax', baseUrl: 'https://api.example/images', model: 'image-1', apiKey: 'valid-key' }), /图片生成仅支持火山引擎/);
+  assert.throws(() => normalizeAiConfig('video', { provider: 'volcengine', baseUrl: 'https://api.example/video', queryUrl: 'https://api.example/video/query', fileUrl: 'https://api.example/files', model: 'video-1', apiKey: 'valid-key' }), /视频生成仅支持 MiniMax/);
 });
 
 test('AI 密钥加密保存且不在公开配置中回显', () => {

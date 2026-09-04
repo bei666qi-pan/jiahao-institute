@@ -2,6 +2,12 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 
 const SLOTS = new Set(['text', 'vision', 'image', 'video']);
 const PROVIDERS = new Set(['minimax', 'volcengine', 'openai-compatible']);
+const SLOT_PROVIDERS = Object.freeze({
+  text: new Set(['minimax', 'volcengine', 'openai-compatible']),
+  vision: new Set(['minimax', 'volcengine', 'openai-compatible']),
+  image: new Set(['volcengine']),
+  video: new Set(['minimax']),
+});
 
 function encryptionKey(secret) {
   if (String(secret || '').length < 12) throw Object.assign(new Error('AI 配置加密密钥未配置'), { statusCode: 503 });
@@ -29,6 +35,10 @@ export function normalizeAiConfig(slot, input = {}) {
   const model = String(input.model || '').trim();
   const apiKey = String(input.apiKey || '').trim();
   if (!PROVIDERS.has(provider)) throw Object.assign(new Error('暂不支持该 AI 供应商'), { statusCode: 400 });
+  if (!SLOT_PROVIDERS[slot].has(provider)) {
+    const message = slot === 'image' ? '图片生成仅支持火山引擎' : slot === 'video' ? '视频生成仅支持 MiniMax' : '该能力暂不支持所选供应商';
+    throw Object.assign(new Error(message), { statusCode: 400 });
+  }
   try { if (!/^https:$/.test(new URL(baseUrl).protocol)) throw new Error(); } catch { throw Object.assign(new Error('服务地址必须是 HTTPS'), { statusCode: 400 }); }
   if (model.length < 2 || model.length > 100) throw Object.assign(new Error('模型名称无效'), { statusCode: 400 });
   if (apiKey.length < 6 || apiKey.length > 500) throw Object.assign(new Error('API 密钥无效'), { statusCode: 400 });
@@ -45,6 +55,7 @@ export function normalizeAiConfig(slot, input = {}) {
 export async function testAiConnectivity(config, fetchImpl = fetch) {
   const started = Date.now();
   let response;
+  let data = {};
   if (config.slot === 'text' || config.slot === 'vision') {
     response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
       method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
@@ -52,15 +63,29 @@ export async function testAiConnectivity(config, fetchImpl = fetch) {
       signal: AbortSignal.timeout(12_000),
     });
     if (!response.ok) throw Object.assign(new Error(`连通测试失败（HTTP ${response.status}）`), { statusCode: 400 });
-    const data = await response.json().catch(() => ({}));
+    data = await response.json().catch(() => ({}));
     if (!data.choices?.[0]?.message) throw Object.assign(new Error('模型未返回有效消息'), { statusCode: 400 });
   } else {
-    response = await fetchImpl(config.baseUrl, { method: 'GET', headers: { Authorization: `Bearer ${config.apiKey}` }, signal: AbortSignal.timeout(12_000) });
-    const data = await response.clone().json().catch(() => ({}));
+    const body = config.slot === 'image'
+      ? { model: config.model, prompt: '连通测试：纯色背景上的一个蓝色圆点，不含文字', size: '1024x1024', response_format: 'url', watermark: true }
+      : { model: config.model, prompt: '连通测试：纯色背景缓慢变化，不含人物和文字', duration: 6, resolution: '768P', prompt_optimizer: false, aigc_watermark: true };
+    response = await fetchImpl(config.baseUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    data = await response.json().catch(() => ({}));
     const providerCode = Number(data?.base_resp?.status_code || data?.error?.code || 0);
     if ([401, 403].includes(response.status) || [1004, 2049].includes(providerCode)) throw Object.assign(new Error('API 密钥鉴权失败'), { statusCode: 400 });
     if (response.status === 404) throw Object.assign(new Error('供应商服务地址不存在'), { statusCode: 400 });
     if (response.status >= 500) throw Object.assign(new Error(`供应商暂时不可用（HTTP ${response.status}）`), { statusCode: 503 });
+    if (!response.ok) throw Object.assign(new Error(`连通测试失败（HTTP ${response.status}）`), { statusCode: 400 });
+    if (providerCode) throw Object.assign(new Error(`连通测试失败（供应商代码 ${providerCode}）`), { statusCode: 400 });
+    if (config.slot === 'image' && !data?.data?.[0]?.url && !data?.data?.[0]?.b64_json) {
+      throw Object.assign(new Error('图片服务未返回有效结果'), { statusCode: 400 });
+    }
+    if (config.slot === 'video' && !data?.task_id) throw Object.assign(new Error('视频服务未返回任务编号'), { statusCode: 400 });
   }
   return { latencyMs: Date.now() - started };
 }

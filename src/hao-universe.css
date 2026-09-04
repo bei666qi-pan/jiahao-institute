@@ -324,6 +324,11 @@ body::before { opacity: .42; }
 .league-progress .done::after { content: "✓"; position: absolute; top: 7px; right: 9px; color: var(--blue); font-weight: 1000; }
 .league-progress .locked { opacity: .58; }
 .league-progress .locked::after { content: "·"; position: absolute; top: 3px; right: 10px; font-size: 22px; }
+.league-pending-banner { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 18px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); border-left: 2px solid var(--ink); background: var(--yellow); }
+.league-pending-banner div { display: grid; gap: 3px; }
+.league-pending-banner strong { font-size: 14px; }
+.league-pending-banner span { color: rgba(0,0,0,.68); font-size: 12px; }
+.league-pending-banner .outline-button { flex: 0 0 auto; min-height: 38px; }
 .league-game-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(300px,360px); align-items: start; border-right: 2px solid var(--ink); border-left: 2px solid var(--ink); background: rgba(255,255,255,.2); }
 .league-game-main { min-width: 0; border-right: 2px solid var(--ink); }
 .league-daily, .league-standings, .league-entry-section, .league-join-card { border: 0; border-radius: 0; background: rgba(255,255,255,.3); }
@@ -538,6 +543,7 @@ body::before { opacity: .42; }
   .league-progress b { font-size: 22px; }
   .league-progress small { font-size: 8px; }
   .league-game-layout, .league-entry-grid { grid-template-columns: 1fr; }
+  .league-pending-banner { align-items: stretch; flex-direction: column; gap: 10px; }
   .league-game-layout { border-right-width: 2px; }
   .league-game-main { border-right: 0; }
   .league-daily, .league-standings, .league-entry-section, .league-join-card { border-radius: 0; }
