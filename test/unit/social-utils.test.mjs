@@ -2,11 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   compareRoomMembers,
+  dateKey,
   getDailyRoomTask,
   pointsForBattleOutcome,
   signSocialResult,
   verifySocialResultToken,
 } from '../../server/social.mjs';
+
+test('数据库 DATE 对象稳定还原为赛季日期', () => {
+  assert.equal(dateKey(new Date('2026-09-04T00:00:00.000Z')), '2026-09-04');
+  assert.equal(dateKey('2026-09-04'), '2026-09-04');
+});
 
 const result = {
   score: 88,

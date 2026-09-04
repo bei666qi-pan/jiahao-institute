@@ -125,7 +125,7 @@ export default function App() {
     {page === 'assay' && result ? <ResultPage result={result} onReset={() => setResult(null)} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'assay' && !result ? <AssayPage onComplete={completeAssessment} onNavigate={navigate}/> : null}
     {page === 'lab' ? <LabPage latestResult={latestResult} onNavigate={navigate} onReactionComplete={applyReaction} mediaTask={mediaTask} mediaJob={mediaJob}/> : null}
-    {page === 'hao' ? <HaoPage onNavigate={navigate}/> : null}
+    {page === 'hao' ? <HaoPage onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'friends' ? <FriendsPage roomCode={roomCode} latestResult={latestResult} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
     {page === 'archive' ? <ArchivePage history={history} onSelectHistory={(item) => { setResult(item); setPage('assay'); window.scrollTo({ top: 0 }); }} onClear={clear}/> : null}
     <footer className="editorial-footer"><strong>豪气宇宙</strong><span>原始内容不保存，结果仅供娱乐。</span></footer>

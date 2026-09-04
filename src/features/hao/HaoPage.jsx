@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { postJson } from '../../app/api';
+import { useEffect, useRef, useState } from 'react';
+import { apiRequest, postJson } from '../../app/api';
 import { Icon } from '../../components/Icon';
 import { AiProgress } from '../../components/AiProgress';
 import { JiahaoPortrait } from '../../components/JiahaoPortrait';
@@ -178,9 +178,18 @@ function FeedbackEntry() {
   </>;
 }
 
-export function HaoPage({ onNavigate }) {
+export function HaoPage({ onNavigate, onRoomOpen }) {
   const [pkOpen, setPkOpen] = useState(false);
+  const [activeLeague, setActiveLeague] = useState(null);
   const quoteInputRef = useRef(null);
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/social/session').then((session) => {
+      const room = session.rooms?.find((item) => item.room_type === 'league');
+      if (active) setActiveLeague(room || null);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const focusQuote = () => {
     document.getElementById('hao-quote-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.setTimeout(() => quoteInputRef.current?.focus(), 320);
@@ -188,7 +197,8 @@ export function HaoPage({ onNavigate }) {
 
   return <main className="hao-page">
     <FeedbackEntry/>
-    <header className="hao-hero"><div className="hao-hero-copy"><h1 aria-label="这里是豪气宇宙"><span>这里是</span><span>豪气宇宙</span></h1><p>测一测，改句话，和朋友比一局。好玩就行，不用当真。</p><div className="hero-actions"><button type="button" className="primary-button" onClick={() => onNavigate('assay')}>测测我有多豪 <Icon name="arrow"/></button><button type="button" className="outline-button" onClick={focusQuote}>把一句话豪化 <Icon name="text"/></button></div></div><figure className="hao-hero-media"><img src="/assets/jiahao/hao-universe-hero.webp" alt="巷子里笑得很开心的嘉豪" width="960" height="1200" fetchPriority="high"/><figcaption>豪气是一种生活态度。</figcaption></figure></header>
+    <header className="hao-hero league-first-hero"><div className="hao-hero-copy"><h1 aria-label="每天一句，七天决出群冠军"><span>每天一句</span><span>七天决出群冠军</span></h1><p>发到微信群，好友 30 秒同题作答。AI 先判，群友再投，每晚锁榜。</p><div className="hero-actions"><button type="button" className="primary-button" onClick={() => activeLeague ? onRoomOpen(activeLeague.code) : onNavigate('friends')}>{activeLeague ? '回到今天的好友联赛' : '创建 7 日好友联赛'} <Icon name="arrow"/></button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>输入房间码</button></div><small className="league-privacy-line"><Icon name="lock" size={15}/> 免注册 · 答案只对房间成员可见 · 赛季后 7 天删除原句</small></div><figure className="hao-hero-media"><img src="/assets/jiahao/hao-universe-hero.webp" alt="巷子里笑得很开心的嘉豪" width="960" height="1200" fetchPriority="high"/><figcaption>今天这题，你最有戏。</figcaption></figure></header>
+    <section className="free-play-heading"><span>FREE PLAY</span><h2>自由玩</h2><p>不想等好友？单人鉴定、语录和图片创作都还在。</p><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做嘉豪鉴定 <Icon name="arrow"/></button></section>
     <HaoQuoteStudio inputRef={quoteInputRef}/>
     <section className="hao-play-rail"><article><div><h2>和好友比一局</h2><p>双方各出一句话，看看谁更豪。</p></div><button type="button" className="outline-button" onClick={() => setPkOpen((value) => !value)} aria-expanded={pkOpen}>{pkOpen ? '收起 PK' : '双人豪气 PK'} <Icon name="arrow"/></button></article><article className="hao-archive-door"><JiahaoPortrait variant={2} label="经典嘉豪人物图鉴预览" className="hao-archive-preview"/><div><h2>嘉豪出没图鉴</h2><p>六种嘉豪状态，原来的经典人物都在。</p></div><button type="button" className="outline-button" onClick={() => onNavigate('archive')}>去看图鉴 <Icon name="arrow"/></button></article></section>
     <HaoPkArena open={pkOpen} onToggle={() => setPkOpen((value) => !value)}/>

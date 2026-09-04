@@ -2,10 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test('根路径以豪气宇宙为首页并把嘉豪与奶龙玩法分开', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '这里是豪气宇宙' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '每天一句，七天决出群冠军' })).toBeVisible();
   await expect(page.getByRole('navigation')).toContainText(/抽象实验室|实验室/);
   await expect(page.getByText('奶龙指数')).toHaveCount(0);
-  await page.getByRole('button', { name: /测测我有多豪/ }).click();
+  const buttonName = page.viewportSize()?.width <= 760 ? '鉴定' : '嘉豪鉴定';
+  await page.getByRole('button', { name: buttonName, exact: true }).click();
   await expect(page.getByRole('heading', { name: '测测你有多豪' })).toBeVisible();
   await expect(page.getByText('奶龙指数')).toHaveCount(0);
 });
@@ -13,7 +14,8 @@ test('根路径以豪气宇宙为首页并把嘉豪与奶龙玩法分开', async
 test('文字鉴定回退结果只展示嘉豪结果', async ({ page }) => {
   await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '测试触发回退' }) }));
   await page.goto('/');
-  await page.getByRole('button', { name: /测测我有多豪/ }).click();
+  const buttonName = page.viewportSize()?.width <= 760 ? '鉴定' : '嘉豪鉴定';
+  await page.getByRole('button', { name: buttonName, exact: true }).click();
   await page.getByRole('tab', { name: '文字' }).click();
   await page.getByLabel('要鉴定的文字').fill('也没什么，只是一个人习惯了。');
   await page.getByLabel(/同意将内容用于本次娱乐分析/).check();

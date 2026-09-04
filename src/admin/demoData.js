@@ -48,7 +48,23 @@ export const demoOverview = {
     ],
     image: { requests: 412, successes: 374, successRate: 90.8, p95Ms: 18200, averageLatencyMs: 9300 },
   },
+  leagueInsights: { inviteVisitors: 386, joinedVisitors: 204, submittedVisitors: 151, votedVisitors: 112, inviteCompletionRate: 39.1, joinSubmissionRate: 74, voteRate: 74.2, activeRooms: 48, averageMembers: 4.2, submissions: 438, reports: 1, reportRate: .2, d1Retention: 28.4, d7Retention: 9.1 },
 };
+
+export const demoPrompts = { prompts: Array.from({ length: 28 }, (_, index) => ({
+  date: new Date(Date.now() + index * 86_400_000).toISOString().slice(0, 10),
+  id: `league-prompt-${String(index + 1).padStart(2, '0')}`,
+  character: index % 2 ? 'nailoong' : 'jiahao',
+  text: index % 2 ? '如果你是奶龙，今天会用哪句话下班？' : '用一句话证明你从来不需要解释。',
+  active: true, overridden: false,
+})) };
+
+export const demoAiConfigs = { encryptionConfigured: true, configs: [
+  { slot: 'text', provider: 'minimax', baseUrl: 'https://api.minimax.cn/v1', model: 'MiniMax-M3', keyConfigured: true, source: 'environment' },
+  { slot: 'vision', provider: 'volcengine', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-seed-2-0-mini-260428', keyConfigured: true, source: 'environment' },
+  { slot: 'image', provider: 'volcengine', baseUrl: 'https://ark.cn-beijing.volces.com/api/plan/v3/images/generations', model: 'doubao-seedream-5.0-lite', keyConfigured: true, source: 'environment' },
+  { slot: 'video', provider: 'minimax', baseUrl: 'https://api.minimaxi.com/v1/video_generation', model: 'MiniMax-Hailuo-2.3', keyConfigured: true, source: 'environment', options: { queryUrl: 'https://api.minimaxi.com/v1/query/video_generation', fileUrl: 'https://api.minimaxi.com/v1/files/retrieve', enabled: true } },
+] };
 
 export const demoVisits = {
   rows: Array.from({ length: 12 }, (_, index) => ({
