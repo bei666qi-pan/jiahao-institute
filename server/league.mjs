@@ -56,7 +56,7 @@ const PROMPT_TEXTS = [
 ];
 
 export const LEAGUE_PROMPTS = Object.freeze(PROMPT_TEXTS.map(([character, mode, text, goal], index) => Object.freeze({
-  id: `league-prompt-${String(index + 1).padStart(2, '0')}`,
+  id: `league-prompt-v2-${String(index + 1).padStart(2, '0')}`,
   character,
   mode,
   text,

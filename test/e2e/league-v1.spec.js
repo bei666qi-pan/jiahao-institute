@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const baseRoom = {
   room: { code: 'H7K9P2Q', name: '测试抽象联赛', roomType: 'league', memberLimit: 12, memberCount: 2, isOwner: false, status: 'active' },
   season: { number: 1, startDate: '2026-09-04', endDate: '2026-09-10', status: 'active', day: 1 },
-  round: { date: '2026-09-04', promptId: 'league-prompt-01', character: 'jiahao', mode: '接梗局', prompt: '宿舍群里有人发：“今晚谁最后洗澡，谁就是明天的闹钟。”你怎么接？', goal: '让人一眼看懂，并忍不住继续接你的梗。', twist: '最多 18 个字', angles: ['一本正经', '顺势加码', '反客为主'], status: 'open', hasSubmitted: false },
+  round: { date: '2026-09-04', promptId: 'league-prompt-v2-01', character: 'jiahao', mode: '接梗局', prompt: '宿舍群里有人发：“今晚谁最后洗澡，谁就是明天的闹钟。”你怎么接？', goal: '让人一眼看懂，并忍不住继续接你的梗。', twist: '最多 18 个字', angles: ['一本正经', '顺势加码', '反客为主'], status: 'open', hasSubmitted: false },
   privacy: '答案仅赛季内的房间成员可见，赛季结束 7 天后删除原句。',
   unlocks: [],
 };

@@ -38,7 +38,8 @@ test('每日题按上海自然日稳定轮换', () => {
 });
 
 test('旧轮次和自定义题也有不代写答案的破题引导', () => {
-  assert.equal(getLeaguePromptGuidance('league-prompt-01').mode, '接梗局');
+  assert.equal(getLeaguePromptGuidance('league-prompt-v2-01').mode, '接梗局');
+  assert.equal(getLeaguePromptGuidance('league-prompt-01').mode, '今日反应局');
   const fallback = getLeaguePromptGuidance('override-2026-09-04', 'nailoong');
   assert.equal(fallback.mode, '今日反应局');
   assert.equal(fallback.angles.length, 3);
