@@ -71,6 +71,7 @@ jobs:
     outputs:
       deployed: ${{ steps.mark-release.outputs.deployed || steps.release.outputs.deployed }}
       target_sha: ${{ steps.release.outputs.target_sha }}
+      expected_quote_service_version: ${{ steps.release.outputs.expected_quote_service_version }}
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
       GITEE_USER: ${{ vars.GITEE_USER }}
@@ -298,3 +299,5 @@ jobs:
     needs: deploy
     if: needs.deploy.outputs.deployed == 'true'
     uses: ./.github/workflows/diagnose-production.yml
+    with:
+      expected_quote_service_version: ${{ needs.deploy.outputs.expected_quote_service_version }}
