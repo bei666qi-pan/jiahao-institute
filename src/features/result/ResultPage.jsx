@@ -92,7 +92,7 @@ export function ResultPage({ result, onReset, onNavigate, onRoomOpen }) {
 
   return <main className="result-v2-page">
     <header className="result-title-row"><h1>鉴定结果</h1><button type="button" className="outline-button" onClick={onReset}>再测一次 <Icon name="reset" size={18}/></button></header>
-    <p className="source-notice">{result.fallbackNotice ? '这次没连上，先给你一个基础成绩。' : '本次结论由 AI 生成，仅供娱乐，不代表真实评价。'}</p>
+    <p className="source-notice">{result.fallbackNotice ? `${result.fallbackNotice}，先给你一个基础成绩。` : '本次结论由 AI 生成，仅供娱乐，不代表真实评价。'}</p>
     <section className="result-layout">
       <div className="verdict-sheet">
         <div className="result-score"><span>嘉豪指数</span><strong>{jiahao.score}</strong></div>

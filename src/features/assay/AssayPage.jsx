@@ -13,6 +13,7 @@ const MODES = [
 ];
 
 const EXAMPLES = ['也没什么，只是一个人习惯了。', '今天不想解释，懂的自然懂。', '我真没装，刚好拍到而已。'];
+const FALLBACK_NOTICE = '当前使用人数过多，奶娃十分之抱歉';
 
 export function AssayPage({ onComplete, onNavigate }) {
   const [mode, setMode] = useState('photo');
@@ -60,9 +61,9 @@ export function AssayPage({ onComplete, onNavigate }) {
         extractedText: prepared.extractedText,
       });
       result = upgradeClientResult({ ...payload, mode, createdAt: Date.now() });
-    } catch (nextError) {
+    } catch {
       result = makeFallbackAssessment(input, mode, files);
-      result.fallbackNotice = nextError.message;
+      result.fallbackNotice = FALLBACK_NOTICE;
     }
     trackProductEvent('assessment_completed', { mode, source: result.source, schemaVersion: result.schemaVersion });
     setBusy(false);

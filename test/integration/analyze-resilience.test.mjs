@@ -77,3 +77,20 @@ test('POST /api/analyze disables reasoning and caps the upstream completion', as
   assert.deepEqual(request.thinking, { type: 'disabled' });
   assert.equal(request.max_tokens, 1200);
 });
+
+test('POST /api/analyze uses MiniMax directly for photo analysis', async () => {
+  const callsBeforeRequest = mockServer.calls.length;
+  const { status, body } = await fetchJson(`${serverUrl}/api/analyze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      mode: 'photo',
+      input: '请鉴定这张图片',
+      images: ['data:image/png;base64,iVBORw0KGgo='],
+    }),
+  });
+
+  assert.equal(status, 200);
+  assert.equal(body.type, '深情破碎豪');
+  assert.equal(body.source, '云端多模态大模型 · 规则计分');
+  assert.deepEqual(mockServer.calls.slice(callsBeforeRequest).map((call) => call.model), ['MiniMax-M3']);
+});
