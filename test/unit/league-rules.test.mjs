@@ -83,6 +83,7 @@ test('赛季奖项按每次提交等权计算 AI 均分，不被票数重复放�
     { memberId: 'b', nickname: '乙', aiScore: 49, voteCount: 4 },
   ];
   const awards = buildLeagueAwards(standings, rows);
+  assert.equal(awards.find((award) => award.key === 'champion').title, '嘉豪之神');
   assert.deepEqual(awards.find((award) => award.key === 'hardest').names, ['甲']);
   assert.deepEqual(awards.find((award) => award.key === 'popular').names, ['甲']);
 });

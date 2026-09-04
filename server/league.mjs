@@ -112,7 +112,7 @@ export function buildLeagueAwards(standings = [], submissionRows = []) {
   const topAi = normalized.length ? Math.max(...normalized.map((item) => item.averageAi)) : null;
   const topVotes = normalized.length ? Math.max(...normalized.map((item) => item.votes)) : 0;
   return [
-    { key: 'champion', title: '群冠军', names: standings.filter((item) => Number(item.seasonPoints) === topPoints).map((item) => item.nickname) },
+    { key: 'champion', title: '嘉豪之神', names: standings.filter((item) => Number(item.seasonPoints) === topPoints).map((item) => item.nickname) },
     { key: 'hardest', title: '最佳嘴硬', names: topAi === null ? [] : normalized.filter((item) => item.averageAi === topAi).map((item) => item.nickname) },
     { key: 'popular', title: '最受欢迎', names: topVotes > 0 ? normalized.filter((item) => item.votes === topVotes).map((item) => item.nickname) : [] },
   ];

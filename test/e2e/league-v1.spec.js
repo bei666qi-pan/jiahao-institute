@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 test('首页把七日好友联赛作为唯一主行动', async ({ page }) => {
   await page.route('**/api/social/session', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, leagueEnabled: true, rooms: [] }) }));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '每天一句，七天决出群冠军' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' })).toBeVisible();
   await expect(page.getByRole('button', { name: '创建 7 日好友联赛' })).toBeVisible();
   await expect(page.getByRole('button', { name: '测测我有多豪' })).not.toBeVisible();
 });
@@ -110,7 +110,7 @@ test('原页面直接开启下一季时会生成新的交卷幂等凭据', async
       member: { memberId: '11111111-1111-4111-8111-111111111111', nickname: '小龙' },
       season: { ...baseRoom.season, number: second ? 2 : 1, status: finished ? 'finished' : 'active' },
       round: { ...baseRoom.round, date: second ? '2026-09-11' : '2026-09-04', hasSubmitted: phase === 'second-submitted' },
-      entries: [], standings: [], awards: finished ? [{ key: 'champion', title: '群冠军', names: ['小龙'] }] : [],
+      entries: [], standings: [], awards: finished ? [{ key: 'champion', title: '嘉豪之神', names: ['小龙'] }] : [],
     };
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });

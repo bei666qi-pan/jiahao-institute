@@ -104,7 +104,7 @@ function LeagueRoom({ data, roomCode, nickname, onNickname, busy, error, notice,
 
   if (!data) return <main className="friends-page"><div className="game-loading">正在同步今天的联赛…</div></main>;
   return <main className="friends-page league-page">
-    <header className="friends-room-head league-room-head"><div><button type="button" className="friends-back" onClick={onBack}><Icon name="arrow" size={16}/> 返回好友首页</button><small>房间码 {roomCode} · 第 {season?.number || 1} 季</small><h1>{room?.name || '七日抽象联赛'}</h1><p>{season?.status === 'finished' ? '本季已结算，查看群冠军后可继续下一季。' : `第 ${currentDay} / 7 天 · 每天一句，明天锁榜。`}</p></div><button type="button" className="primary-button league-invite-button" onClick={onShare}>邀请好友 <Icon name="share"/></button></header>
+    <header className="friends-room-head league-room-head"><div><button type="button" className="friends-back" onClick={onBack}><Icon name="arrow" size={16}/> 返回好友首页</button><small>房间码 {roomCode} · 第 {season?.number || 1} 季</small><h1>{room?.name || '七日抽象联赛'}</h1><p>{season?.status === 'finished' ? '本季已结算，查看嘉豪之神后可继续下一季。' : `第 ${currentDay} / 7 天 · 每天一句，明天锁榜。`}</p></div><button type="button" className="primary-button league-invite-button" onClick={onShare}>邀请好友 <Icon name="share"/></button></header>
     {error ? <p className="form-message error" role="alert">{error}</p> : null}{notice ? <p className="form-message info" role="status">{notice}</p> : null}<RecoveryNotice code={recoveryCode}/>
     {!data.isMember ? <section className="league-join-card"><span>30 秒入局</span><h2>{round?.prompt}</h2><p>先起个昵称，不用注册，也不用先做鉴定。</p><label htmlFor="league-nickname">联赛昵称<input id="league-nickname" maxLength={24} value={nickname} onChange={(event) => onNickname(event.target.value)}/></label><button type="button" className="yellow-button" disabled={busy || !nickname.trim()} onClick={onJoin}>加入联赛 <Icon name="arrow"/></button></section> : <>
       <nav className="league-progress" aria-label="七日赛季进度">
@@ -190,7 +190,7 @@ export function FriendsPage({ roomCode, latestResult, onNavigate, onRoomOpen }) 
 
   const shareRoom = async () => {
     const url = `${window.location.origin}/r/${roomCode}`;
-    try { if (navigator.share) await navigator.share({ title: roomData?.room?.name || '好友联赛', text: roomData?.round?.prompt || '每天一句，七天决出群冠军。', url }); else { await navigator.clipboard.writeText(url); setNotice('邀请链接已复制，直接发到群里就能开玩。'); } trackProductEvent(roomData?.room?.roomType === 'league' ? 'league_invite_shared' : 'share_clicked', { mode: 'room_link', roomType: roomData?.room?.roomType || 'friends' }); }
+    try { if (navigator.share) await navigator.share({ title: roomData?.room?.name || '好友联赛', text: roomData?.round?.prompt || '每天一句，七天决出嘉豪之神。', url }); else { await navigator.clipboard.writeText(url); setNotice('邀请链接已复制，直接发到群里就能开玩。'); } trackProductEvent(roomData?.room?.roomType === 'league' ? 'league_invite_shared' : 'share_clicked', { mode: 'room_link', roomType: roomData?.room?.roomType || 'friends' }); }
     catch (nextError) { if (nextError?.name !== 'AbortError') setError('分享没有成功，请复制浏览器地址。'); }
   };
 
