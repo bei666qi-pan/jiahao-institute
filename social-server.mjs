@@ -1,10 +1,11 @@
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
-import { server } from './server.mjs';
+import { aiConfigService, closeServerResources, server } from './server.mjs';
 import { Observability } from './server/observability.mjs';
 import { handleQuoteRequest, QUOTE_SERVICE_VERSION } from './server/quote.mjs';
 import { SocialService, signSocialResult } from './server/social.mjs';
 import { signReactionResult } from './server/reaction-token.mjs';
+import { createLeagueJudge } from './server/league.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const signingSecret = process.env.SOCIAL_SIGNING_SECRET
@@ -14,12 +15,18 @@ const signingSecret = process.env.SOCIAL_SIGNING_SECRET
   || '';
 
 const maintenance = new Observability();
-const social = new SocialService(process.env, signingSecret);
+const social = new SocialService(process.env, signingSecret, {
+  recordLeagueEvent: (req, name, properties) => maintenance.recordProductEvent(req, { name, properties }),
+  judgeLeagueAnswer: createLeagueJudge(process.env, fetch, async () => {
+    const config = await aiConfigService.runtime('text');
+    return { id: config.provider, base: config.baseUrl, model: config.model, key: config.apiKey, source: '云端文字大模型', prices: {} };
+  }),
+});
 
 try {
   await maintenance.init();
-  void maintenance.maintain();
-  setInterval(() => void maintenance.maintain(), 60 * 60 * 1000).unref();
+  void Promise.all([maintenance.maintain(), social.maintain()]);
+  setInterval(() => void Promise.all([maintenance.maintain(), social.maintain()]), 60 * 60 * 1000).unref();
 } catch (error) {
   console.error(`数据库初始化失败：${String(error?.message || '未知错误').slice(0, 160)}`);
 }
@@ -56,10 +63,16 @@ server.on('request', async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if (await social.handle(req, res, url)) return;
   if (req.method === 'POST' && url.pathname === '/api/quote') {
-    return handleQuoteRequest(req, res, maintenance);
+    return handleQuoteRequest(req, res, maintenance, { providerResolver: async () => {
+      const config = await aiConfigService.runtime('text');
+      return { id: config.provider, base: config.baseUrl, model: config.model, key: config.apiKey, source: '云端文字大模型', prices: {} };
+    } });
   }
   if (req.method === 'GET' && url.pathname === '/healthz') {
-    appendJsonFields(res, () => ({ quoteServiceVersion: QUOTE_SERVICE_VERSION }));
+    appendJsonFields(res, () => ({
+      quoteServiceVersion: QUOTE_SERVICE_VERSION,
+      league: { enabled: social.leagueEnabled, databaseConfigured: social.enabled, promptCount: 28 },
+    }));
   }
   if (req.method === 'POST' && url.pathname === '/api/analyze') attachResultSignature(res);
   if (req.method === 'POST' && url.pathname === '/api/reactions/score') {
@@ -75,4 +88,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   server.listen(PORT, '::', () => {
     console.log(`嘉豪鉴定服务已启动：${PORT}（好友榜已接入）`);
   });
+}
+
+export { server };
+
+export async function closeSocialResources() {
+  await Promise.all([
+    social.pool?.end(),
+    maintenance.close(),
+    closeServerResources(),
+  ]);
 }

@@ -40,7 +40,7 @@ function jsonResponse(body, status = 200) {
 }
 
 test('quote service exposes the current deployment version', () => {
-  assert.equal(QUOTE_SERVICE_VERSION, 5);
+  assert.equal(QUOTE_SERVICE_VERSION, 6);
 });
 
 test('normalizeQuotePayload validates and normalizes quote options', () => {

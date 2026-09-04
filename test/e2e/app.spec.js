@@ -61,8 +61,8 @@ async function openSection(page, desktopName, mobileName = desktopName) {
 }
 
 async function completeTextAssessment(page, text = '也没什么，只是习惯一个人处理。', { expectResult = true } = {}) {
-  if (await page.getByRole('heading', { name: '这里是豪气宇宙' }).isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: /测测我有多豪/ }).click();
+  if (await page.getByRole('heading', { name: '每天一句，七天决出群冠军' }).isVisible().catch(() => false)) {
+    await openSection(page, '嘉豪鉴定', '鉴定');
   }
   await page.getByRole('tab', { name: '文字' }).click();
   await page.getByLabel('要鉴定的文字').fill(text);
@@ -78,12 +78,13 @@ test.describe('嘉豪鉴定所升级全链路', () => {
   });
 
   test('五模块导航与人格档案是正式页面', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: '这里是豪气宇宙' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '每天一句，七天决出群冠军' })).toBeVisible();
     await openSection(page, '人格档案', '我的');
     await expect(page.getByRole('heading', { name: '人格档案' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '嘉豪物种' })).toBeVisible();
     await page.getByRole('tab', { name: '奶龙人格' }).click();
-    await expect(page.getByRole('heading', { name: '淡人型奶龙豪' }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: '待解锁人格' }).first()).toBeVisible();
+    await expect(page.getByText('完成奶龙反应局，命中该人格后解锁。').first()).toBeVisible();
   });
 
   test('照片、聊天和文字三种鉴定都进入嘉豪结果', async ({ page }) => {
@@ -162,14 +163,16 @@ test.describe('嘉豪鉴定所升级全链路', () => {
     await expect(page.getByText('奶龙本人（我）')).toBeVisible();
   });
 
-  test('好友首页先说明成绩前置条件，加入房间不被创建流程干扰', async ({ page }) => {
+  test('好友首页联赛免鉴定，经典单挑仍保留成绩前置', async ({ page }) => {
     await openSection(page, '好友豪气榜', '好友');
+    await expect(page.getByRole('button', { name: '创建 7 日好友联赛' })).toBeEnabled();
+    await page.getByRole('button', { name: /单挑好友/ }).click();
     const assessFirst = page.getByRole('button', { name: '先完成鉴定' });
     await expect(assessFirst).toBeEnabled();
 
     await assessFirst.click();
     await completeTextAssessment(page, '测完以后带着成绩回好友页。', { expectResult: false });
-    await expect(page.getByRole('heading', { name: '好友豪气榜' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '好友七日联赛' })).toBeVisible();
     await expect(page.getByRole('button', { name: /单挑好友/ })).toBeVisible();
 
     await page.getByRole('tab', { name: '加入房间' }).click();

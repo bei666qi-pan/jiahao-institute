@@ -11,10 +11,15 @@ async function openStudio(page) {
   }
 }
 
+async function openAssay(page) {
+  await page.goto('/');
+  const buttonName = page.viewportSize()?.width <= 760 ? '鉴定' : '嘉豪鉴定';
+  await page.getByRole('button', { name: buttonName, exact: true }).click();
+}
+
 test('文字鉴定请求期间显示明确标注的预计进度', async ({ page }) => {
   await page.route('**/api/analyze', () => new Promise(() => {}));
-  await page.goto('/');
-  await page.getByRole('button', { name: /测测我有多豪/ }).click();
+  await openAssay(page);
   await page.getByRole('tab', { name: '文字' }).click();
   await page.getByLabel('要鉴定的文字').fill('今天下雨，我带了伞。');
   await page.getByLabel('同意将内容用于本次娱乐分析').check();

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { calculateEstimatedCost } from './observability.mjs';
 import { resolveTextProvider } from './text-provider.mjs';
 
-export const QUOTE_SERVICE_VERSION = 5;
+export const QUOTE_SERVICE_VERSION = 6;
 
 const LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
 const STYLES = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'];
@@ -301,7 +301,7 @@ async function requestAttempt(fetchImpl, provider, payload, attempt) {
 
 export async function requestQuoteModel(rawPayload, options = {}) {
   const payload = normalizeQuotePayload(rawPayload);
-  const provider = getQuoteProvider(options.env || process.env);
+  const provider = options.provider || getQuoteProvider(options.env || process.env);
   const fetchImpl = options.fetchImpl || fetch;
   if (!provider.key) throw new Error('文字大模型尚未配置');
 
@@ -349,14 +349,14 @@ function record(observability, req, details) {
   }
 }
 
-export async function handleQuoteRequest(req, res, observability) {
+export async function handleQuoteRequest(req, res, observability, options = {}) {
   const started = performance.now();
   const requestId = randomUUID();
   let payload = null;
-  const provider = getQuoteProvider();
+  const provider = options.providerResolver ? await options.providerResolver() : getQuoteProvider();
   try {
     payload = await readJson(req);
-    const response = await requestQuoteModel(payload);
+    const response = await requestQuoteModel(payload, { provider });
     const cost = calculateEstimatedCost(response.usage, response.provider.prices);
     sendJson(res, 200, response.data);
     record(observability, req, {

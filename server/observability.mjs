@@ -12,9 +12,11 @@ const BOT_RE = /bot|crawler|spider|slurp|headless|lighthouse|monitoring|uptime|p
 const PRODUCT_EVENT_NAMES = new Set([
   'assessment_started', 'assessment_completed', 'share_clicked', 'challenge_created',
   'challenge_opened', 'friend_completed', 'lab_game_started', 'lab_game_completed',
-  'room_created', 'room_joined',
+  'room_created', 'room_joined', 'league_room_created', 'league_joined',
+  'league_submission_completed', 'league_vote_cast', 'league_reported',
+  'league_season_started', 'league_invite_shared',
 ]);
-const PRODUCT_PROPERTY_KEYS = new Set(['mode', 'source', 'roomType', 'game', 'schemaVersion', 'outcome']);
+const PRODUCT_PROPERTY_KEYS = new Set(['mode', 'source', 'roomType', 'game', 'schemaVersion', 'outcome', 'character', 'roundDay']);
 
 const RANGE_OPTIONS = {
   '24h': { milliseconds: 24 * 60 * 60 * 1000, bucket: 'hour' },
@@ -179,6 +181,36 @@ export function buildProductInsights(eventRows = [], gameRows = [], imageRow = n
       p95Ms: number(row.p95_ms),
       averageLatencyMs: number(row.average_latency_ms),
     })),
+  };
+}
+
+export function buildLeagueInsights(eventRows = [], stateRow = {}, retentionRow = {}) {
+  const roundedRatio = (top, bottom) => {
+    const value = ratio(top, bottom);
+    return value === null ? null : Math.round(value * 10) / 10;
+  };
+  const events = new Map(eventRows.map((row) => [row.event_name, number(row.visitors)]));
+  const inviteVisitors = events.get('challenge_opened') || 0;
+  const joinedVisitors = events.get('league_joined') || 0;
+  const submittedVisitors = events.get('league_submission_completed') || 0;
+  const votedVisitors = events.get('league_vote_cast') || 0;
+  const submissions = number(stateRow.submissions);
+  const reports = number(stateRow.reports);
+  return {
+    inviteVisitors,
+    joinedVisitors,
+    submittedVisitors,
+    votedVisitors,
+    inviteCompletionRate: roundedRatio(submittedVisitors, inviteVisitors),
+    joinSubmissionRate: roundedRatio(submittedVisitors, joinedVisitors),
+    voteRate: roundedRatio(votedVisitors, submittedVisitors),
+    activeRooms: number(stateRow.active_rooms),
+    averageMembers: number(stateRow.average_members),
+    submissions,
+    reports,
+    reportRate: roundedRatio(reports, submissions),
+    d1Retention: roundedRatio(retentionRow.retained_d1, retentionRow.eligible_d1),
+    d7Retention: roundedRatio(retentionRow.retained_d7, retentionRow.eligible_d7),
   };
 }
 
@@ -359,7 +391,7 @@ export class Observability {
       coalesce(sum(estimated_cost_micros),0)::bigint estimated_cost_micros,
       count(*) filter (where pricing_configured)::bigint priced_requests
       from jh_api_requests where occurred_at >= $1 and occurred_at < $2`;
-    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel, labGames, imagePerformance, videoPerformance, feedback] = await Promise.all([
+    const [currentTraffic, previousTraffic, currentApi, previousApi, trafficSeries, apiSeries, providers, endpoints, errors, productFunnel, labGames, imagePerformance, videoPerformance, feedback, leagueState, leagueRetention] = await Promise.all([
       this.query(trafficSql, [range.start, range.end]),
       this.query(trafficSql, [range.previousStart, range.start]),
       this.query(apiSql, [range.start, range.end]),
@@ -409,6 +441,31 @@ export class Observability {
       this.query(`select feedback_id, category, message, contact, created_at
         from jh_feedback where created_at >= $1 and created_at < $2
         order by created_at desc limit 20`, [range.start, range.end]),
+      this.query(`select
+        (select count(*)::int from jh_rooms where room_type='league' and status='active' and expires_at>now()) active_rooms,
+        (select coalesce(avg(member_count),0)::numeric from (
+          select count(*)::numeric member_count from jh_league_members lm join jh_rooms r on r.room_id=lm.room_id
+          where r.room_type='league' and r.status='active' group by lm.room_id
+        ) counts) average_members,
+        (select count(*)::int from jh_league_submissions where created_at >= $1 and created_at < $2) submissions,
+        (select count(*)::int from jh_league_reports where created_at >= $1 and created_at < $2) reports`, [range.start, range.end]),
+      this.query(`with firsts as (
+          select visitor_id,min((created_at at time zone '${SHANGHAI_TIME_ZONE}')::date) first_day
+          from jh_product_events where event_name='league_submission_completed' and visitor_id is not null
+          group by visitor_id
+        ), returns as (
+          select distinct visitor_id,(created_at at time zone '${SHANGHAI_TIME_ZONE}')::date day
+          from jh_product_events where event_name='league_submission_completed' and visitor_id is not null
+        )
+        select
+          count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-1)::int eligible_d1,
+          count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-1 and exists (
+            select 1 from returns r where r.visitor_id=firsts.visitor_id and r.day=firsts.first_day+1))::int retained_d1,
+          count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-7)::int eligible_d7,
+          count(*) filter (where first_day <= (now() at time zone '${SHANGHAI_TIME_ZONE}')::date-7 and exists (
+            select 1 from returns r where r.visitor_id=firsts.visitor_id and r.day=firsts.first_day+7))::int retained_d7
+        from firsts where first_day >= ($1 at time zone '${SHANGHAI_TIME_ZONE}')::date
+          and first_day < ($2 at time zone '${SHANGHAI_TIME_ZONE}')::date`, [range.start, range.end]),
     ]);
     const t = currentTraffic.rows[0]; const pt = previousTraffic.rows[0];
     const a = currentApi.rows[0]; const pa = previousApi.rows[0];
@@ -439,6 +496,7 @@ export class Observability {
       recentErrors: errors.rows,
       productFunnel: productFunnel.rows.map((row) => ({ event: row.event_name, events: number(row.events), visitors: number(row.visitors) })),
       productInsights: buildProductInsights(productFunnel.rows, labGames.rows, imagePerformance.rows[0], videoPerformance.rows),
+      leagueInsights: buildLeagueInsights(productFunnel.rows, leagueState.rows[0], leagueRetention.rows[0]),
       feedback: feedback.rows,
     };
   }

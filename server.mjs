@@ -5,7 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { calculateEstimatedCost, Observability } from './server/observability.mjs';
-import { loginAdmin, logoutAdmin, verifyAdmin } from './server/admin-auth.mjs';
+import { loginAdmin, logoutAdmin, sameOrigin, verifyAdmin } from './server/admin-auth.mjs';
 import { generateAbstractImage } from './server/image-generation.mjs';
 import { PostgresFeedbackStore, normalizeFeedback } from './server/feedback.mjs';
 import {
@@ -15,6 +15,8 @@ import {
   createVideoGenerationService,
 } from './server/video-generation.mjs';
 import { resolveTextProvider } from './server/text-provider.mjs';
+import { AiConfigService } from './server/ai-config.mjs';
+import { getLeaguePrompt, normalizeLeaguePromptOverride, shanghaiDate } from './server/league.mjs';
 import {
   buildAssessmentV2,
   calculateJiahaoScore,
@@ -61,6 +63,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
 const PROVIDER_BUSY_MESSAGE = '当前使用人数过多，奶娃十分之抱歉';
 const observability = new Observability();
+export const aiConfigService = new AiConfigService(process.env, observability.enabled ? observability : null);
 const MINIMAX_VIDEO_BASE = (process.env.MINIMAX_VIDEO_BASE_URL || 'https://api.minimaxi.com').replace(/\/$/, '');
 const VIDEO_CONFIG = {
   enabled: process.env.MINIMAX_VIDEO_ENABLED !== 'false',
@@ -74,12 +77,6 @@ const VIDEO_CONFIG = {
     return frame.imageUrl || frame.imageDataUrl || '';
   },
 };
-const videoService = createVideoGenerationService({
-  store: new PostgresVideoGenerationStore(observability.pool),
-  provider: createMinimaxVideoProvider(VIDEO_CONFIG),
-  enabled: VIDEO_CONFIG.enabled,
-  unavailableMessage: '今日使用人数过多，暂不支持生成',
-});
 const feedbackStore = new PostgresFeedbackStore(observability.pool);
 
 const DIMENSIONS = ['mystery', 'flex', 'niche', 'deep', 'show', 'language'];
@@ -251,16 +248,48 @@ function extractJson(text) {
   throw new Error('模型未返回完整结构');
 }
 
-function getProvider(isVision) {
-  return isVision ? MULTIMODAL_PROVIDER : { ...TEXT_PROVIDER };
+function providerPrices(provider, vision = false) {
+  const prefix = provider === 'minimax' ? 'MINIMAX_TEXT' : provider === 'volcengine' || vision ? 'ARK' : 'DEEPSEEK';
+  return { input: process.env[`${prefix}_INPUT_CNY_PER_MILLION`], output: process.env[`${prefix}_OUTPUT_CNY_PER_MILLION`], cachedInput: process.env[`${prefix}_CACHED_INPUT_CNY_PER_MILLION`] };
 }
 
-function getVisionProviders() {
-  const primary = getProvider(true);
+async function getProvider(isVision) {
+  const config = await aiConfigService.runtime(isVision ? 'vision' : 'text');
+  return { id: config.provider === 'volcengine' ? 'ark' : config.provider, base: config.baseUrl, model: config.model, key: config.apiKey, source: isVision ? '云端多模态大模型' : '云端文字大模型', prices: providerPrices(config.provider, isVision) };
+}
+
+async function getVisionProviders() {
+  const primary = await getProvider(true);
   if (primary.id !== 'minimax' || !ARK_VISION_PROVIDER.key) return [primary];
   return primary.base === ARK_VISION_PROVIDER.base && primary.model === ARK_VISION_PROVIDER.model
     ? [primary]
     : [primary, ARK_VISION_PROVIDER];
+}
+
+async function getImageConfig() {
+  const [image, vision] = await Promise.all([aiConfigService.runtime('image'), aiConfigService.runtime('vision')]);
+  return {
+    references: IMAGE_CONFIG.references,
+    volcengine: { key: image.apiKey, url: image.baseUrl, model: image.model },
+    quality: { key: vision.apiKey, url: `${vision.baseUrl}/chat/completions`, model: vision.model },
+  };
+}
+
+async function getVideoService() {
+  const config = await aiConfigService.runtime('video');
+  const providerConfig = {
+    enabled: config.options?.enabled !== false,
+    key: config.apiKey,
+    url: config.baseUrl,
+    queryUrl: config.options?.queryUrl,
+    fileUrl: config.options?.fileUrl,
+    model: config.model,
+    async createFirstFrame(request) {
+      const frame = await generateAbstractImage(request, await getImageConfig());
+      return frame.imageUrl || frame.imageDataUrl || '';
+    },
+  };
+  return createVideoGenerationService({ store: new PostgresVideoGenerationStore(observability.pool), provider: createMinimaxVideoProvider(providerConfig), enabled: providerConfig.enabled, unavailableMessage: '今日使用人数过多，暂不支持生成' });
 }
 
 export function validImages(value, maximum = 9) {
@@ -312,7 +341,7 @@ async function analyzeWithModel(payload) {
   const extractedText = cleanText(payload.extractedText, '', 20_000);
   const content = [{ type: 'text', text: `鉴定方式：${modeLabel}\n用户内容：${userText}\n文件提取内容：${extractedText || '无'}\n请严格按要求生成娱乐鉴定 JSON。` }];
   for (const image of validImages(payload.images)) content.push({ type: 'image_url', image_url: { url: image } });
-  const modelResponse = await requestModelWithFallback(isVision ? getVisionProviders() : [getProvider(false)], SYSTEM_PROMPT, content);
+  const modelResponse = await requestModelWithFallback(isVision ? await getVisionProviders() : [await getProvider(false)], SYSTEM_PROMPT, content);
   const provider = modelResponse.provider;
   const signals = normalizeResult(modelResponse.output);
   const dimensions = normalizeAssessmentDimensions(signals.dimensions);
@@ -337,7 +366,7 @@ async function analyzePkWithModel(payload) {
     participant.images.forEach((image) => content.push({ type: 'image_url', image_url: { url: image } }));
   });
   content.push({ type: 'text', text: '请严格按要求分别分析并完成综合裁决。' });
-  const modelResponse = await requestModelWithFallback(isVision ? getVisionProviders() : [getProvider(false)], PK_SYSTEM_PROMPT, content);
+  const modelResponse = await requestModelWithFallback(isVision ? await getVisionProviders() : [await getProvider(false)], PK_SYSTEM_PROMPT, content);
   const provider = modelResponse.provider;
   return {
     data: normalizePkResult(modelResponse.output, participants.map((participant) => participant.name), provider.source === '云端多模态大模型' ? '模型综合裁决 · 多模态' : '模型综合裁决 · 文字'),
@@ -352,7 +381,7 @@ async function generateQuoteWithModel(payload) {
   const style = ['深情', '高冷', '小众', '无意炫耀', '战斗', '朋友圈', '个性签名', '评论区'].includes(payload.style) ? payload.style : '高冷';
   const input = cleanText(payload.input, '', 300);
   if (input.length < 2) throw new Error('至少输入两个字');
-  const provider = getProvider(false);
+  const provider = await getProvider(false);
   const modelResponse = await requestModel(provider, QUOTE_SYSTEM_PROMPT, `任务：${mode}\n豪气等级：${level}\n风格：${style}\n原句：${input}\n请只返回 JSON。`);
   return {
     data: { output: cleanText(modelResponse.output.output, mode === 'dehao' ? '这件事比较复杂，我暂时不想解释。' : '也没什么，只是有些事情，说了你们也不一定懂。', 160), source: provider.source },
@@ -379,7 +408,7 @@ async function handleModelRequest(req, res, endpoint, handler) {
   } catch (error) {
     const message = error?.name === 'AbortError' ? '大模型响应超时' : cleanText(error?.message, '服务暂时不可用', 100);
     const statusCode = message.includes('体积') ? 413 : 503;
-    const provider = modelInfo?.provider || error?.provider || getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
+    const provider = modelInfo?.provider || error?.provider || await getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
     void observability.recordApiRequest(req, {
       requestId, endpoint, mode: payload?.mode || (endpoint === '/api/pk' ? 'pk' : null), provider: provider.id,
       model: provider.model, statusCode, ok: false, latencyMs: performance.now() - started,
@@ -393,7 +422,7 @@ async function handleImageRequest(req, res) {
   const started = performance.now();
   const requestId = randomUUID();
   try {
-    const result = await generateAbstractImage(await readJson(req), IMAGE_CONFIG);
+    const result = await generateAbstractImage(await readJson(req), await getImageConfig());
     sendJson(res, 200, result);
     void observability.recordApiRequest(req, {
       requestId, endpoint: '/api/images/generate', mode: 'image_generation', provider: result.provider,
@@ -415,6 +444,7 @@ async function handleVideoRequest(req, res, action) {
   const started = performance.now();
   const requestId = randomUUID();
   let visitor = null;
+  const runtimeVideo = await aiConfigService.runtime('video');
   try {
     visitor = await observability.ensureVisitor(req);
     const result = await action(visitor.visitorId);
@@ -422,7 +452,7 @@ async function handleVideoRequest(req, res, action) {
     sendJson(res, statusCode, result.body, visitor.cookies);
     void observability.recordApiRequest(req, {
       requestId, endpoint: result.endpoint, mode: 'video_generation', provider: 'minimax',
-      model: VIDEO_CONFIG.model, statusCode, ok: true, latencyMs: performance.now() - started,
+      model: runtimeVideo.model, statusCode, ok: true, latencyMs: performance.now() - started,
     });
   } catch (error) {
     const known = error instanceof VideoGenerationError || error?.code === 'VIDEO_DATABASE_NOT_CONFIGURED';
@@ -431,7 +461,7 @@ async function handleVideoRequest(req, res, action) {
     const message = known ? cleanText(error.message, '视频生成暂时不可用', 100) : '视频生成暂时不可用';
     void observability.recordApiRequest(req, {
       requestId, endpoint: '/api/videos', mode: 'video_generation', provider: 'minimax',
-      model: VIDEO_CONFIG.model, statusCode, ok: false, latencyMs: performance.now() - started,
+      model: runtimeVideo.model, statusCode, ok: false, latencyMs: performance.now() - started,
       errorCode: code, errorMessage: message,
     });
     return sendJson(res, statusCode, {
@@ -469,32 +499,35 @@ export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
-    if (req.method === 'GET' && pathname === '/healthz') return sendJson(res, 200, {
+    if (req.method === 'GET' && pathname === '/healthz') {
+      const [textConfig, visionConfig, imageConfig, videoConfig] = await Promise.all(['text', 'vision', 'image', 'video'].map((slot) => aiConfigService.runtime(slot)));
+      return sendJson(res, 200, {
       status: 'ok',
-      textModelConfigured: Boolean(TEXT_PROVIDER.key),
-      visionModelConfigured: Boolean(MULTIMODAL_PROVIDER.key),
-      textModel: TEXT_PROVIDER.model,
-      visionModel: MULTIMODAL_PROVIDER.model,
+      textModelConfigured: Boolean(textConfig.apiKey),
+      visionModelConfigured: Boolean(visionConfig.apiKey),
+      textModel: textConfig.model,
+      visionModel: visionConfig.model,
       imageGeneration: {
-        configured: Boolean(IMAGE_CONFIG.volcengine.key),
+        configured: Boolean(imageConfig.apiKey),
         provider: 'volcengine',
-        model: IMAGE_CONFIG.volcengine.model,
+        model: imageConfig.model,
         characters: {
           nailoong: Boolean(IMAGE_CONFIG.references.nailoong),
           jiahao: Boolean(IMAGE_CONFIG.references.jiahao),
         },
       },
       videoGeneration: {
-        configured: Boolean(VIDEO_CONFIG.key) && VIDEO_CONFIG.enabled,
+        configured: Boolean(videoConfig.apiKey) && videoConfig.options?.enabled !== false,
         databaseConfigured: observability.enabled,
         provider: 'minimax',
-        model: VIDEO_CONFIG.model,
+        model: videoConfig.model,
         dailyLimit: 1,
-        ...(VIDEO_CONFIG.enabled ? {} : { unavailableReason: 'provider_unavailable' }),
+        ...(videoConfig.options?.enabled !== false ? {} : { unavailableReason: 'provider_unavailable' }),
       },
       feedback: { configured: observability.enabled },
       observability: observability.status(),
-    });
+      });
+    }
 
     if (req.method === 'POST' && pathname === '/api/telemetry/session') {
       const payload = await readJson(req);
@@ -524,6 +557,7 @@ export const server = createServer(async (req, res) => {
     }
     if (pathname.startsWith('/api/admin/')) {
       if (!(await verifyAdmin(req, observability))) return sendJson(res, 401, { error: '登录已失效，请重新验证' });
+      if (!['GET', 'HEAD'].includes(req.method) && !sameOrigin(req)) return sendJson(res, 403, { error: '请求来源无效' });
       const range = url.searchParams.get('range') || '7d';
       if (req.method === 'GET' && pathname === '/api/admin/overview') return sendJson(res, 200, await observability.overview(range));
       if (req.method === 'GET' && pathname === '/api/admin/visits') return sendJson(res, 200, await observability.visits(range, url.searchParams.get('cursor'), url.searchParams.get('limit')));
@@ -531,10 +565,47 @@ export const server = createServer(async (req, res) => {
         endpoint: url.searchParams.get('endpoint'), status: url.searchParams.get('status'), limit: url.searchParams.get('limit'),
       }));
       if (req.method === 'GET' && pathname === '/api/admin/costs') return sendJson(res, 200, await observability.costs(range));
-      if (req.method === 'GET' && pathname === '/api/admin/status') return sendJson(res, 200, observability.status({
-        textModelConfigured: Boolean(TEXT_PROVIDER.key), visionModelConfigured: Boolean(MULTIMODAL_PROVIDER.key),
-        adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_PROVIDER.model, visionModel: MULTIMODAL_PROVIDER.model,
-      }));
+      if (req.method === 'GET' && pathname === '/api/admin/status') {
+        const [textConfig, visionConfig] = await Promise.all([aiConfigService.runtime('text'), aiConfigService.runtime('vision')]);
+        return sendJson(res, 200, observability.status({
+          textModelConfigured: Boolean(textConfig.apiKey), visionModelConfigured: Boolean(visionConfig.apiKey),
+          adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: textConfig.model, visionModel: visionConfig.model,
+        }));
+      }
+      if (req.method === 'GET' && pathname === '/api/admin/ai-config') return sendJson(res, 200, await aiConfigService.list());
+      const aiConfigMatch = pathname.match(/^\/api\/admin\/ai-config\/(text|vision|image|video)\/(test|activate)$/);
+      if (req.method === 'POST' && aiConfigMatch) {
+        const payload = await readJson(req);
+        const result = aiConfigMatch[2] === 'test'
+          ? await aiConfigService.test(aiConfigMatch[1], payload)
+          : await aiConfigService.activate(payload.testToken);
+        return sendJson(res, 200, result);
+      }
+      if (req.method === 'GET' && pathname === '/api/admin/league-prompts') {
+        const today = shanghaiDate();
+        const rows = await observability.query(`select prompt_date,prompt_id,character,prompt_text,active,updated_at
+          from jh_league_prompt_overrides where prompt_date >= $1 and prompt_date < $1::date+28 order by prompt_date`, [today]);
+        const overrides = new Map(rows.rows.map((row) => [String(row.prompt_date).slice(0, 10), row]));
+        const prompts = Array.from({ length: 28 }, (_, index) => {
+          const date = new Date(Date.parse(`${today}T00:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10);
+          const fallback = getLeaguePrompt(date);
+          const override = overrides.get(date);
+          return override ? { date, id: override.prompt_id, character: override.character, text: override.prompt_text, active: override.active, overridden: true }
+            : { date, ...fallback, active: true, overridden: false };
+        });
+        return sendJson(res, 200, { prompts });
+      }
+      const promptMatch = pathname.match(/^\/api\/admin\/league-prompts\/(\d{4}-\d{2}-\d{2})$/);
+      if (req.method === 'PUT' && promptMatch) {
+        const normalized = normalizeLeaguePromptOverride({ ...(await readJson(req)), date: promptMatch[1] });
+        const fallback = getLeaguePrompt(normalized.date);
+        await observability.query(`insert into jh_league_prompt_overrides
+          (prompt_date,prompt_id,character,prompt_text,active) values ($1,$2,$3,$4,$5)
+          on conflict (prompt_date) do update set prompt_id=excluded.prompt_id,character=excluded.character,
+            prompt_text=excluded.prompt_text,active=excluded.active,updated_at=now()`,
+        [normalized.date, `override-${normalized.date}`, normalized.character, normalized.text, normalized.active]);
+        return sendJson(res, 200, { saved: true, prompt: { ...fallback, ...normalized, id: `override-${normalized.date}`, overridden: true } });
+      }
       return sendJson(res, 404, { error: '后台接口不存在' });
     }
 
@@ -561,20 +632,20 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'GET' && pathname === '/api/videos/quota') {
       return handleVideoRequest(req, res, async (visitorId) => ({
         endpoint: '/api/videos/quota',
-        body: await videoService.quota(visitorId),
+        body: await (await getVideoService()).quota(visitorId),
       }));
     }
     if (req.method === 'POST' && pathname === '/api/videos/tasks') {
       return handleVideoRequest(req, res, async (visitorId) => ({
         endpoint: '/api/videos/tasks', statusCode: 202,
-        body: await videoService.create(visitorId, await readJson(req)),
+        body: await (await getVideoService()).create(visitorId, await readJson(req)),
       }));
     }
     const videoTaskMatch = pathname.match(/^\/api\/videos\/tasks\/([0-9a-f-]{36})$/i);
     if (req.method === 'GET' && videoTaskMatch) {
       return handleVideoRequest(req, res, async (visitorId) => ({
         endpoint: '/api/videos/tasks/:id',
-        body: await videoService.status(videoTaskMatch[1], visitorId),
+        body: await (await getVideoService()).status(videoTaskMatch[1], visitorId),
       }));
     }
     if (req.method === 'GET' || req.method === 'HEAD') return await serveStatic(req, res);
@@ -585,6 +656,10 @@ export const server = createServer(async (req, res) => {
     return sendJson(res, statusCode, { error: message, ...(error?.code ? { code: error.code } : {}) });
   }
 });
+
+export async function closeServerResources() {
+  await observability.close();
+}
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {

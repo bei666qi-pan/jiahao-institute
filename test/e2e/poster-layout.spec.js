@@ -4,7 +4,8 @@ test('新战绩卡实际生成并保持1080×1440完整画布', async ({ page })
   await page.route('**/api/analyze', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '使用基础成绩' }) }));
   await page.route('**/api/social/rooms', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '好友房暂不可用' }) }));
   await page.goto('/');
-  await page.getByRole('button', { name: /测测我有多豪/ }).click();
+  const buttonName = page.viewportSize()?.width <= 760 ? '鉴定' : '嘉豪鉴定';
+  await page.getByRole('button', { name: buttonName, exact: true }).click();
   await page.getByRole('tab', { name: '文字' }).click();
   await page.getByLabel('要鉴定的文字').fill('也没什么，只是一个人习惯了。');
   await page.getByLabel('同意将内容用于本次娱乐分析').check();

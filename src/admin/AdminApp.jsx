@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { demoCosts, demoOverview, demoRequests, demoStatus, demoVisits } from './demoData.js';
+import { demoAiConfigs, demoCosts, demoOverview, demoPrompts, demoRequests, demoStatus, demoVisits } from './demoData.js';
 import './admin.css';
 
 const PREVIEW = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
@@ -9,6 +9,8 @@ const NAV = [
   { id: 'traffic', label: '访问分析', icon: 'bars', path: '/admin/traffic' },
   { id: 'requests', label: '请求明细', icon: 'list', path: '/admin/requests' },
   { id: 'costs', label: '成本分析', icon: 'cost', path: '/admin/costs' },
+  { id: 'prompts', label: '联赛题库', icon: 'list', path: '/admin/prompts' },
+  { id: 'ai-config', label: 'AI 配置', icon: 'pulse', path: '/admin/ai-config' },
   { id: 'status', label: '系统状态', icon: 'pulse', path: '/admin/status' },
 ];
 
@@ -190,6 +192,7 @@ function Overview({ data }) {
       </div>
     </section>
     <section className="funnel-panel"><header><div><h2>玩家转化</h2><p>按匿名玩家去重，百分比表示从上一步继续的人。</p></div><span>不记录提交内容</span></header><div className="funnel-grid"><Funnel title="鉴定到分享" rows={insights.assessment || []}/><Funnel title="邀请到好友完成" rows={insights.invite || []}/></div></section>
+    <section className="play-metrics"><header><div><h2>七日联赛健康度</h2><p>留存只按到期队列计算，样本不足时显示为空。</p></div></header><div className="play-metric-grid">{[['活跃房间',data.leagueInsights?.activeRooms],['平均成员',data.leagueInsights?.averageMembers],['邀请→提交',data.leagueInsights?.inviteCompletionRate == null ? '—' : `${data.leagueInsights.inviteCompletionRate}%`],['投票率',data.leagueInsights?.voteRate == null ? '—' : `${data.leagueInsights.voteRate}%`],['D1 留存',data.leagueInsights?.d1Retention == null ? '样本不足' : `${data.leagueInsights.d1Retention}%`],['D7 留存',data.leagueInsights?.d7Retention == null ? '样本不足' : `${data.leagueInsights.d7Retention}%`],['举报率',data.leagueInsights?.reportRate == null ? '—' : `${data.leagueInsights.reportRate}%`]].map(([label,value]) => <article key={label}><span>{label}</span><strong>{value ?? 0}</strong></article>)}</div></section>
     <section className="play-metrics"><header><div><h2>玩法表现</h2><p>开局、完成与参与人数分开统计，避免把重复游玩误算成新玩家。</p></div></header><div className="play-metric-grid">{(insights.games || []).map((row) => <article key={row.game}><span>{gameLabels[row.game] || row.game}</span><strong>{row.completionRate == null ? '—' : `${formatNumber(row.completionRate, 1)}%`}</strong><small>{formatNumber(row.completed)} / {formatNumber(row.started)} 局完成 · {formatNumber(row.players)} 人参与</small></article>)}<article className="image-health"><span>图片生成</span><strong>{insights.image?.successRate == null ? '—' : `${formatNumber(insights.image.successRate, 1)}%`}</strong><small>{formatNumber(insights.image?.successes)} / {formatNumber(insights.image?.requests)} 张成功 · P95 {formatNumber((insights.image?.p95Ms || 0) / 1000, 1)} 秒</small></article>{(insights.video || []).map((row) => <article className="image-health" key={row.character}><span>{row.character === 'jiahao' ? '嘉豪' : '奶龙'}视频</span><strong>{row.successRate == null ? '—' : `${formatNumber(row.successRate, 1)}%`}</strong><small>{formatNumber(row.successes)} / {formatNumber(row.requests)} 条成功 · P95 {formatNumber((row.p95Ms || 0) / 1000, 1)} 秒</small></article>)}</div>{insights.games?.length || insights.image?.requests || insights.video?.length ? null : <Empty title="暂时还没有玩法数据" detail="用户完成玩法后会自动出现。"/>}</section>
     <section className="data-table-wrap wide"><h2>最新意见反馈</h2>{data.feedback?.length ? <table><thead><tr><th>时间</th><th>类型</th><th>内容</th><th>联系方式</th></tr></thead><tbody>{data.feedback.map((row) => <tr key={row.feedback_id}><td>{formatTime(row.created_at, true)}</td><td>{row.category}</td><td>{row.message}</td><td>{row.contact || '—'}</td></tr>)}</tbody></table> : <Empty title="暂无意见反馈" detail="用户从首页提交后会出现在这里。"/>}</section>
     <section className="api-panel"><h2>接口与模型成本</h2>
@@ -250,6 +253,55 @@ function CostsPage({ data }) {
   </div>;
 }
 
+function PromptPage({ data }) {
+  const [rows, setRows] = useState(data.prompts || []);
+  const [saving, setSaving] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => { setRows(data.prompts || []); }, [data]);
+  const update = (date, patch) => setRows((current) => current.map((row) => row.date === date ? { ...row, ...patch } : row));
+  const save = async (row) => {
+    setSaving(row.date); setNotice('');
+    try {
+      if (!PREVIEW) await api(`/api/admin/league-prompts/${row.date}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character: row.character, text: row.text, active: row.active }) });
+      update(row.date, { overridden: true }); setNotice(`${row.date} 已更新`);
+    } catch (error) { setNotice(error.message); }
+    finally { setSaving(''); }
+  };
+  return <div className="detail-page"><section className="data-table-wrap wide prompt-schedule"><header><div><h2>28 天题库排期</h2><p>按上海时间每天开一题。修改只影响还未生成的当日轮次。</p></div></header>{notice ? <p role="status" className="coverage-warning">{notice}</p> : null}<div className="prompt-list">{rows.map((row) => <article key={row.date}><div><time>{row.date}</time><select aria-label={`${row.date} 主角`} value={row.character} onChange={(event) => update(row.date, { character: event.target.value })}><option value="jiahao">嘉豪</option><option value="nailoong">奶龙</option></select></div><textarea aria-label={`${row.date} 题目`} maxLength={120} value={row.text} onChange={(event) => update(row.date, { text: event.target.value })}/><label><input type="checkbox" checked={row.active} onChange={(event) => update(row.date, { active: event.target.checked })}/>启用</label><button className="load-more" disabled={saving === row.date || row.text.trim().length < 4} onClick={() => save(row)}>{saving === row.date ? '保存中…' : row.overridden ? '更新' : '覆盖排期'}</button></article>)}</div></section></div>;
+}
+
+const AI_SLOT_LABELS = { text: '文字鉴定 / 联赛', vision: '图片理解与质检', image: '角色图片生成', video: '角色视频生成' };
+const AI_SLOT_PROVIDERS = {
+  text: [['minimax', 'MiniMax'], ['volcengine', '火山引擎'], ['openai-compatible', 'OpenAI 兼容']],
+  vision: [['minimax', 'MiniMax'], ['volcengine', '火山引擎'], ['openai-compatible', 'OpenAI 兼容']],
+  image: [['volcengine', '火山引擎']],
+  video: [['minimax', 'MiniMax']],
+};
+
+function AiConfigPage({ data, onReload }) {
+  const [drafts, setDrafts] = useState(() => Object.fromEntries((data.configs || []).map((item) => [item.slot, { ...item, apiKey: '' }])));
+  const [tested, setTested] = useState({});
+  const [working, setWorking] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => { setDrafts(Object.fromEntries((data.configs || []).map((item) => [item.slot, { ...item, apiKey: '' }]))); setTested({}); }, [data]);
+  const update = (slot, patch) => { setDrafts((current) => ({ ...current, [slot]: { ...current[slot], ...patch } })); setTested((current) => ({ ...current, [slot]: null })); };
+  const testConfig = async (slot) => {
+    setWorking(slot); setNotice('');
+    try {
+      const result = PREVIEW ? { tested: true, testToken: `preview-${slot}`, latencyMs: 126 } : await api(`/api/admin/ai-config/${slot}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(drafts[slot]) });
+      setTested((current) => ({ ...current, [slot]: result })); setNotice(`${AI_SLOT_LABELS[slot]} 连通成功，尚未切换。`);
+    } catch (error) { setNotice(`测试失败：${error.message}；正在使用的配置保持不变。`); }
+    finally { setWorking(''); }
+  };
+  const activate = async (slot) => {
+    setWorking(slot); setNotice('');
+    try { if (!PREVIEW) await api(`/api/admin/ai-config/${slot}/activate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testToken: tested[slot]?.testToken }) }); setNotice(`${AI_SLOT_LABELS[slot]} 已原子切换到新配置。`); await onReload(); }
+    catch (error) { setNotice(`未切换：${error.message}`); }
+    finally { setWorking(''); }
+  };
+  return <div className="detail-page"><section className="ai-config-intro"><h2>AI 配置中心</h2><p>新配置先做真实鉴权与服务连通测试，通过后才能点击“正式切换”。测试失败不会影响当前线上 AI。图片和视频测试会发起一次最小生成请求，可能产生供应商费用。</p>{!data.encryptionConfigured ? <div className="coverage-warning">请先在部署环境配置 AI_CONFIG_ENCRYPTION_KEY，否则禁止激活。</div> : null}{notice ? <div className="coverage-warning" role="status">{notice}</div> : null}</section><section className="ai-config-grid">{Object.values(drafts).map((item) => <article key={item.slot}><header><div><small>{item.slot.toUpperCase()}</small><h3>{AI_SLOT_LABELS[item.slot]}</h3></div><span className={item.keyConfigured ? 'configured' : ''}>{item.keyConfigured ? '当前已配置' : '未配置'}</span></header><label>供应商<select value={item.provider} onChange={(event) => update(item.slot, { provider: event.target.value })}>{AI_SLOT_PROVIDERS[item.slot].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>服务地址<input value={item.baseUrl} onChange={(event) => update(item.slot, { baseUrl: event.target.value })}/></label><label>模型<input value={item.model} onChange={(event) => update(item.slot, { model: event.target.value })}/></label><label>API 密钥<input type="password" autoComplete="new-password" value={item.apiKey} onChange={(event) => update(item.slot, { apiKey: event.target.value })} placeholder="只写入，永不回显"/></label>{item.slot === 'video' ? <><label>任务查询地址<input value={item.options?.queryUrl || ''} onChange={(event) => update(item.slot, { options: { ...item.options, queryUrl: event.target.value } })}/></label><label>文件查询地址<input value={item.options?.fileUrl || ''} onChange={(event) => update(item.slot, { options: { ...item.options, fileUrl: event.target.value } })}/></label></> : null}<footer><button className="load-more" disabled={working === item.slot || !item.apiKey} onClick={() => testConfig(item.slot)}>{working === item.slot ? '测试中…' : '测试连通'}</button><button className="load-more primary" disabled={!tested[item.slot] || working === item.slot || !data.encryptionConfigured} onClick={() => activate(item.slot)}>正式切换</button></footer>{tested[item.slot] ? <small className="test-success">已通过 · {tested[item.slot].latencyMs}ms · 5 分钟内可切换</small> : null}</article>)}</section></div>;
+}
+
 function StatusPage({ data }) {
   const items = [
     ['PostgreSQL', data.databaseHealthy, data.databaseConfigured ? '连接正常' : '尚未配置'],
@@ -282,7 +334,7 @@ export default function AdminApp() {
     setBusy(true); setError('');
     try {
       if (PREVIEW) {
-        const map = { overview: demoOverview, traffic: demoOverview, requests: demoRequests, costs: demoCosts, status: demoStatus };
+        const map = { overview: demoOverview, traffic: demoOverview, requests: demoRequests, costs: demoCosts, prompts: demoPrompts, 'ai-config': demoAiConfigs, status: demoStatus };
         setData(map[view]); setExtra(view === 'traffic' ? demoVisits : null); return;
       }
       if (view === 'overview') setData(await api(`/api/admin/overview?range=${range}`));
@@ -295,6 +347,8 @@ export default function AdminApp() {
         setData(await api(`/api/admin/requests?${query}`));
       }
       if (view === 'costs') setData(await api(`/api/admin/costs?range=${range}`));
+      if (view === 'prompts') setData(await api('/api/admin/league-prompts'));
+      if (view === 'ai-config') setData(await api('/api/admin/ai-config'));
       if (view === 'status') setData(await api('/api/admin/status'));
     } catch (err) {
       if (err.status === 401) setAuthenticated(false);
@@ -318,11 +372,11 @@ export default function AdminApp() {
     const next = await api(`/api/admin/requests?${query}`);
     setData((current) => ({ rows: [...current.rows, ...next.rows], nextCursor: next.nextCursor }));
   };
-  const title = useMemo(() => ({ overview: '访问总览', traffic: '访问分析', requests: '请求明细', costs: '成本分析', status: '系统状态' })[view], [view]);
+  const title = useMemo(() => ({ overview: '访问总览', traffic: '访问分析', requests: '请求明细', costs: '成本分析', prompts: '联赛题库', 'ai-config': 'AI 配置', status: '系统状态' })[view], [view]);
 
   if (authenticated === null) return <div className="admin-boot">正在验证访问权限…</div>;
   if (!authenticated) return <Login onLogin={login} configured={configured} />;
   return <div className="admin-shell"><Sidebar view={view} onNavigate={navigate} updatedAt={data?.generatedAt} /><main className="admin-main"><Topbar title={title} range={range} onRange={setRange} onRefresh={load} onLogout={logout} busy={busy} headingRef={headingRef} />
-    <div className={busy && !data ? 'admin-content loading' : 'admin-content'} aria-busy={busy}>{error ? <ErrorNotice message={error} onRetry={load} /> : null}{!data && !error ? <div className="admin-loading" role="status">正在汇总观测数据…</div> : null}{data && view === 'overview' ? <Overview data={data} /> : null}{data && view === 'traffic' && extra ? <TrafficPage overview={data} visits={extra} /> : null}{data && view === 'requests' ? <RequestsPage data={data} filters={filters} onFilters={setFilters} onMore={loadMore} /> : null}{data && view === 'costs' ? <CostsPage data={data} /> : null}{data && view === 'status' ? <StatusPage data={data} /> : null}</div>
+    <div className={busy && !data ? 'admin-content loading' : 'admin-content'} aria-busy={busy}>{error ? <ErrorNotice message={error} onRetry={load} /> : null}{!data && !error ? <div className="admin-loading" role="status">正在汇总观测数据…</div> : null}{data && view === 'overview' ? <Overview data={data} /> : null}{data && view === 'traffic' && extra ? <TrafficPage overview={data} visits={extra} /> : null}{data && view === 'requests' ? <RequestsPage data={data} filters={filters} onFilters={setFilters} onMore={loadMore} /> : null}{data && view === 'costs' ? <CostsPage data={data} /> : null}{data && view === 'prompts' ? <PromptPage data={data} /> : null}{data && view === 'ai-config' ? <AiConfigPage data={data} onReload={load} /> : null}{data && view === 'status' ? <StatusPage data={data} /> : null}</div>
   </main></div>;
 }
