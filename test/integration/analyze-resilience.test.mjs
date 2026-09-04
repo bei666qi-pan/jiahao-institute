@@ -33,13 +33,15 @@ async function fetchJson(url, options = {}) {
 let serverUrl = '';
 let serverInstance = null;
 let mockServer = null;
+let serverModule = null;
 
 test.before(async () => {
   mockServer = await startMockServer(0, {
     analyzeContentSuffix: ({ callCount }) => callCount === 1 ? '\n{"note":"以上为娱乐鉴定"}' : '',
   });
   setupEnv(mockServer.url);
-  const { server } = await import('../../server.mjs');
+  serverModule = await import('../../server.mjs');
+  const { server } = serverModule;
   await new Promise((resolve) => {
     serverInstance = server.listen(0, '127.0.0.1', () => {
       const { port } = serverInstance.address();
@@ -93,4 +95,16 @@ test('POST /api/analyze uses MiniMax directly for photo analysis', async () => {
   assert.equal(body.type, '深情破碎豪');
   assert.equal(body.source, '云端多模态大模型 · 规则计分');
   assert.deepEqual(mockServer.calls.slice(callsBeforeRequest).map((call) => call.model), ['MiniMax-M3']);
+});
+
+test('model fallback failure identifies the last provider that was attempted', async () => {
+  const providers = [
+    { id: 'minimax', model: 'MiniMax-M3', key: '', base: 'https://minimax.invalid' },
+    { id: 'ark', model: 'ark-vision', key: '', base: 'https://ark.invalid' },
+  ];
+
+  await assert.rejects(
+    serverModule.requestModelWithFallback(providers, 'system', 'content'),
+    (error) => error.provider === providers[1],
+  );
 });

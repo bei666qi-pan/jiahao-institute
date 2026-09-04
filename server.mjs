@@ -15,6 +15,7 @@ import {
   createVideoGenerationService,
 } from './server/video-generation.mjs';
 import { resolveTextProvider } from './server/text-provider.mjs';
+import { getLeaguePrompt, normalizeLeaguePromptOverride, shanghaiDate } from './server/league.mjs';
 import {
   buildAssessmentV2,
   calculateJiahaoScore,
@@ -297,13 +298,13 @@ async function requestModel(provider, systemPrompt, content) {
   } finally { clearTimeout(timeout); }
 }
 
-async function requestModelWithFallback(providers, systemPrompt, content) {
+export async function requestModelWithFallback(providers, systemPrompt, content) {
   let lastError;
   for (const provider of providers) {
     try {
       return { ...(await requestModel(provider, systemPrompt, content)), provider };
     } catch (error) {
-      lastError = error;
+      lastError = Object.assign(error instanceof Error ? error : new Error(String(error)), { provider });
     }
   }
   throw lastError || new Error('大模型暂时不可用');
@@ -383,7 +384,7 @@ async function handleModelRequest(req, res, endpoint, handler) {
   } catch (error) {
     const message = error?.name === 'AbortError' ? '大模型响应超时' : cleanText(error?.message, '服务暂时不可用', 100);
     const statusCode = message.includes('体积') ? 413 : 503;
-    const provider = modelInfo?.provider || getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
+    const provider = modelInfo?.provider || error?.provider || getProvider(payload?.mode === 'photo' || payload?.mode === 'chat');
     void observability.recordApiRequest(req, {
       requestId, endpoint, mode: payload?.mode || (endpoint === '/api/pk' ? 'pk' : null), provider: provider.id,
       model: provider.model, statusCode, ok: false, latencyMs: performance.now() - started,
@@ -539,6 +540,31 @@ export const server = createServer(async (req, res) => {
         textModelConfigured: Boolean(TEXT_PROVIDER.key), visionModelConfigured: Boolean(MULTIMODAL_PROVIDER.key),
         adminPasswordConfigured: Boolean(ADMIN_PASSWORD), textModel: TEXT_PROVIDER.model, visionModel: MULTIMODAL_PROVIDER.model,
       }));
+      if (req.method === 'GET' && pathname === '/api/admin/league-prompts') {
+        const today = shanghaiDate();
+        const rows = await observability.query(`select prompt_date,prompt_id,character,prompt_text,active,updated_at
+          from jh_league_prompt_overrides where prompt_date >= $1 and prompt_date < $1::date+28 order by prompt_date`, [today]);
+        const overrides = new Map(rows.rows.map((row) => [String(row.prompt_date).slice(0, 10), row]));
+        const prompts = Array.from({ length: 28 }, (_, index) => {
+          const date = new Date(Date.parse(`${today}T00:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10);
+          const fallback = getLeaguePrompt(date);
+          const override = overrides.get(date);
+          return override ? { date, id: override.prompt_id, character: override.character, text: override.prompt_text, active: override.active, overridden: true }
+            : { date, ...fallback, active: true, overridden: false };
+        });
+        return sendJson(res, 200, { prompts });
+      }
+      const promptMatch = pathname.match(/^\/api\/admin\/league-prompts\/(\d{4}-\d{2}-\d{2})$/);
+      if (req.method === 'PUT' && promptMatch) {
+        const normalized = normalizeLeaguePromptOverride({ ...(await readJson(req)), date: promptMatch[1] });
+        const fallback = getLeaguePrompt(normalized.date);
+        await observability.query(`insert into jh_league_prompt_overrides
+          (prompt_date,prompt_id,character,prompt_text,active) values ($1,$2,$3,$4,$5)
+          on conflict (prompt_date) do update set prompt_id=excluded.prompt_id,character=excluded.character,
+            prompt_text=excluded.prompt_text,active=excluded.active,updated_at=now()`,
+        [normalized.date, `override-${normalized.date}`, normalized.character, normalized.text, normalized.active]);
+        return sendJson(res, 200, { saved: true, prompt: { ...fallback, ...normalized, id: `override-${normalized.date}`, overridden: true } });
+      }
       return sendJson(res, 404, { error: '后台接口不存在' });
     }
 
