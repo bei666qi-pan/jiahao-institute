@@ -56,11 +56,6 @@ const IMAGE_CONFIG = {
     url: ARK_IMAGE_URL,
     model: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5.0-lite',
   },
-  quality: {
-    key: MULTIMODAL_PROVIDER.key,
-    url: `${MULTIMODAL_PROVIDER.base}/chat/completions`,
-    model: MULTIMODAL_PROVIDER.model,
-  },
 };
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_BODY_BYTES = 28 * 1024 * 1024;
