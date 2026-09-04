@@ -19,8 +19,6 @@ const config = {
   volcengine: { key: 'volc-test', url: 'https://ark.test/api/v3/images/generations', model: 'doubao-seedream-5.0-lite' },
 };
 
-const qualityConfig = { ...config, quality: { key: 'vision-test', url: 'https://ark.test/api/v3/chat/completions', model: 'vision-test' } };
-
 test('图片服务只等待火山链路而不为 MiniMax 备援预留时间', () => {
   assert.deepEqual(IMAGE_PROVIDER_TIMEOUTS, { volcengine: 90_000 });
 });
@@ -77,33 +75,6 @@ test('仅对供应商输出图片误拦截自动重试一次', async () => {
   });
   assert.equal(calls, 2);
   assert.equal(result.imageUrl, 'https://img.test/retry.jpg');
-});
-
-test('角色视觉质检使用各自规则且不返回走样结果', async () => {
-  const qualityPrompts = [];
-  await generateAbstractImage({ character: 'jiahao', prompt: '蓝色片场' }, qualityConfig, async (url, init) => {
-    const body = JSON.parse(init.body);
-    if (url.includes('chat/completions')) {
-      qualityPrompts.push(body.messages[0].content);
-      return jsonResponse(200, { choices: [{ message: { content: '{"passes":true,"reason":"角色一致"}' } }] });
-    }
-    return jsonResponse(200, { id: 'good-jiahao', data: [{ b64_json: 'Z29vZA==' }] });
-  });
-  assert.match(qualityPrompts[0], /嘉豪参考人物/);
-  assert.doesNotMatch(qualityPrompts[0], /浅绿色圆盘眼睛/);
-  await assert.rejects(generateAbstractImage({ character: 'nailoong', prompt: '站着发呆' }, qualityConfig, async (url) => {
-    if (url.includes('chat/completions')) return jsonResponse(200, { choices: [{ message: { content: '{"passes":false,"reason":"角色不一致"}' } }] });
-    return jsonResponse(200, { id: 'bad', data: [{ b64_json: 'YmFk' }] });
-  }), (error) => error.code === 'IDENTITY_MISMATCH');
-});
-
-test('质检服务技术性不可用时不丢弃已生成图片且不伪造通过', async () => {
-  const result = await generateAbstractImage({ character: 'jiahao', prompt: '暖白摄影棚' }, qualityConfig, async (url) => {
-    if (url.includes('chat/completions')) return jsonResponse(403, { error: { code: 'AccountOverdueError' } });
-    return jsonResponse(200, { id: 'quality-unavailable', data: [{ url: 'https://img.test/jiahao.jpg' }] });
-  });
-  assert.equal(result.imageUrl, 'https://img.test/jiahao.jpg');
-  assert.deepEqual(result.quality, { status: 'unavailable' });
 });
 
 test('请求校验角色、比例并限制用户描述长度', () => {

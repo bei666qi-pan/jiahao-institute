@@ -114,7 +114,6 @@ jobs:
             and .model == "doubao-seedream-5.0-lite"
             and .character == "nailoong"
             and .mediaType == "image"
-            and (.quality.status == "verified" or .quality.status == "unavailable")
             and (((.imageDataUrl // .imageUrl // "") | length) > 0)' /tmp/image.json >/dev/null
 
       - uses: actions/checkout@v4

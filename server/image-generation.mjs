@@ -92,40 +92,6 @@ function imageResult(data, config, request) {
   };
 }
 
-function extractJsonObject(value) {
-  const start = String(value || '').indexOf('{');
-  const end = String(value || '').lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('invalid quality response');
-  return JSON.parse(String(value).slice(start, end + 1));
-}
-
-function qualityPrompt(character) {
-  if (character === 'jiahao') return '你是图片角色一致性质检员。只判断人物身份，只返回 JSON：{"passes":true或false,"reason":"一句短理由"}。生成图必须与嘉豪参考人物保持同一人的脸型、发型、身材比例和整体气质；换人、明显脸部漂移、卡通化或怪物化必须为 false。';
-  return '你是图片角色一致性质检员。只判断角色身份，只返回 JSON：{"passes":true或false,"reason":"一句短理由"}。必须是浅黄色圆胖软体人形、米白椭圆肚皮、只有两只浅绿色圆盘眼睛和一条闭合水平细线嘴；出现额外黑眼、鼻子、耳朵、角、尾巴、张嘴或牙齿必须为 false。';
-}
-
-async function assertImageIdentity(result, quality, fetchImpl) {
-  if (!quality?.key || !quality?.url || !quality?.model) return { status: 'unavailable' };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35_000);
-  try {
-    const response = await fetchImpl(quality.url, {
-      method: 'POST', headers: { Authorization: `Bearer ${quality.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: quality.model, messages: [
-        { role: 'system', content: qualityPrompt(result.character) },
-        { role: 'user', content: [{ type: 'text', text: '检查这张生成图，只返回 JSON。' }, { type: 'image_url', image_url: { url: result.imageDataUrl || result.imageUrl } }] },
-      ], temperature: 0, response_format: { type: 'json_object' } }), signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    if (extractJsonObject(data?.choices?.[0]?.message?.content).passes !== true) throw new ImageGenerationError('生成角色与参考图不一致', { code: 'IDENTITY_MISMATCH', provider: 'volcengine' });
-    return { status: 'verified' };
-  } catch (error) {
-    if (error instanceof ImageGenerationError) throw error;
-    return { status: 'unavailable' };
-  } finally { clearTimeout(timeout); }
-}
-
 export async function generateAbstractImage(payload, config, fetchImpl = fetch) {
   const request = normalizeImageRequest(payload);
   const volcengine = config?.volcengine || {};
@@ -146,14 +112,5 @@ export async function generateAbstractImage(payload, config, fetchImpl = fetch) 
     if (error?.code !== 'OUTPUT_SAFETY_RETRYABLE') throw error;
     data = await postImage(volcengine.url, volcengine.key, body, fetchImpl);
   }
-  const result = imageResult(data, volcengine, request);
-  try {
-    result.quality = await assertImageIdentity(result, config?.quality, fetchImpl);
-    return result;
-  } catch (error) {
-    if (error?.code !== 'IDENTITY_MISMATCH') throw error;
-    const retryResult = imageResult(await postImage(volcengine.url, volcengine.key, body, fetchImpl), volcengine, request);
-    retryResult.quality = await assertImageIdentity(retryResult, config?.quality, fetchImpl);
-    return retryResult;
-  }
+  return imageResult(data, volcengine, request);
 }
