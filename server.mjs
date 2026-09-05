@@ -14,7 +14,9 @@ import {
   createMinimaxVideoProvider,
   createVideoGenerationService,
 } from './server/video-generation.mjs';
+import { SceneService, createSceneGenerator } from './server/scenes.mjs';
 import { resolveTextProvider } from './server/text-provider.mjs';
+import { publicRuntimeVersion } from './server/runtime-version.mjs';
 import { AiConfigService } from './server/ai-config.mjs';
 import { getLeaguePrompt, normalizeLeaguePromptOverride, shanghaiDate } from './server/league.mjs';
 import {
@@ -78,6 +80,14 @@ const VIDEO_CONFIG = {
   },
 };
 const feedbackStore = new PostgresFeedbackStore(observability.pool);
+const sceneService = new SceneService({
+  secret: process.env.SOCIAL_SIGNING_SECRET || process.env.LEAGUE_RECOVERY_SECRET || process.env.ADMIN_PASSWORD || process.env.DEEPSEEK_API_KEY || process.env.ARK_API_KEY || '',
+  enabled: process.env.SCENES_ENABLED !== 'false',
+  pool: observability.pool,
+  generate: createSceneGenerator({ resolveProvider: () => getProvider(false), observe: (req, event) => observability.recordApiRequest(req, event) }),
+});
+const sceneMaintenance = setInterval(() => void sceneService.maintain().catch(() => {}), 60 * 1000);
+sceneMaintenance.unref();
 
 const DIMENSIONS = ['mystery', 'flex', 'niche', 'deep', 'show', 'language'];
 const TYPES = ['自在极意豪', '美式嘉豪', '深情破碎豪', '计算机嘉豪', '股票嘉豪', '不懂装懂豪', '小众优越豪', '潜伏嘉豪', '反向嘉豪', '无意炫耀豪'];
@@ -499,10 +509,12 @@ export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
+    if (await sceneService.handle(req, res, url)) return;
     if (req.method === 'GET' && pathname === '/healthz') {
       const [textConfig, visionConfig, imageConfig, videoConfig] = await Promise.all(['text', 'vision', 'image', 'video'].map((slot) => aiConfigService.runtime(slot)));
       return sendJson(res, 200, {
       status: 'ok',
+      ...publicRuntimeVersion(),
       textModelConfigured: Boolean(textConfig.apiKey),
       visionModelConfigured: Boolean(visionConfig.apiKey),
       textModel: textConfig.model,
@@ -658,6 +670,7 @@ export const server = createServer(async (req, res) => {
 });
 
 export async function closeServerResources() {
+  clearInterval(sceneMaintenance);
   await observability.close();
 }
 

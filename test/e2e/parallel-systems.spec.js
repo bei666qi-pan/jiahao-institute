@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+// 原玩法回归在小剧场关闭模式下运行；新主入口由 scenes.spec.mjs 覆盖。
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/scenes', route => route.fulfill({ json: { enabled: false, scenes: [] } }));
+});
+
 test('豪气宇宙与抽象实验室并行存在且豪气语录、双人PK可完成', async ({ page }) => {
   await page.route('**/api/quote', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ output: '不是累，只是豪气暂时选择了沉默。', source: '云端文字大模型' }) }));
   await page.route('**/api/pk', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({

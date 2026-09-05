@@ -131,9 +131,10 @@ export function buildLeagueAwards(standings = [], submissionRows = []) {
   const stats = new Map();
   for (const row of submissionRows) {
     const memberId = row.memberId ?? row.member_id;
-    if (!memberId || row.aiScore === null || row.aiScore === undefined) continue;
+    const aiScore = row.aiScore ?? row.ai_score;
+    if (!memberId || aiScore === null || aiScore === undefined) continue;
     const current = stats.get(memberId) || { nickname: row.nickname || '', scores: [], votes: 0 };
-    current.scores.push(Number(row.aiScore ?? row.ai_score) || 0);
+    current.scores.push(Number(aiScore) || 0);
     current.votes += Math.max(0, Number(row.voteCount ?? row.vote_count) || 0);
     stats.set(memberId, current);
   }
@@ -179,10 +180,15 @@ export function normalizeLeaguePromptOverride(payload = {}) {
 }
 
 export function normalizeLeagueJudgement(raw = {}) {
+  if (raw?.publishable === false) return { score: null, tag: '', verdict: '', publishable: false };
+  const tag = typeof raw?.tag === 'string' ? raw.tag.trim().replace(/[<>\u0000-\u001f]/g, '').slice(0, 16) : '';
+  const verdict = typeof raw?.verdict === 'string' ? raw.verdict.trim().replace(/[<>\u0000-\u001f]/g, '').slice(0, 60) : '';
+  if (raw?.publishable !== true || !['number', 'string'].includes(typeof raw.score)
+    || String(raw.score).trim() === '' || !Number.isFinite(Number(raw.score)) || !tag || !verdict) {
+    throw Object.assign(new Error('AI 判定字段不完整，请重试'), { statusCode: 503, code: 'LEAGUE_JUDGE_INVALID' });
+  }
   const scoreValue = Number(raw.score);
-  const score = Number.isFinite(scoreValue) ? Math.max(0, Math.min(100, Math.round(scoreValue))) : 0;
-  const tag = String(raw.tag || '').trim().replace(/[<>\u0000-\u001f]/g, '').slice(0, 16) || '抽象观察员';
-  const verdict = String(raw.verdict || '').trim().replace(/[<>\u0000-\u001f]/g, '').slice(0, 60) || '这一招还在等好友现场鉴定。';
+  const score = Math.max(0, Math.min(100, Math.round(scoreValue)));
   return { score, tag, verdict, publishable: raw.publishable === true };
 }
 

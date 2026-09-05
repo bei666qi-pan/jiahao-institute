@@ -39,7 +39,8 @@ export function dateKey(value) {
   if (direct) return direct[1];
   const parsed = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(parsed.getTime())) return '';
-  return parsed.toISOString().slice(0, 10);
+  // pg represents a SQL DATE as midnight in the process timezone, not a UTC instant.
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
 }
 
 export function getDailyRoomTask(dateValue) {
@@ -356,7 +357,8 @@ export class SocialService {
       await client.query('begin');
       const rounds = await client.query(`select lr.* from jh_league_rounds lr
         join jh_league_seasons ls on ls.season_id=lr.season_id
-        where ls.room_id=$1 and lr.status='open' and lr.round_date<$2 for update`, [roomId, today]);
+        where ls.room_id=$1 and lr.status='open' and lr.round_date<$2
+        order by lr.round_id for update of lr`, [roomId, today]);
       for (const round of rounds.rows) {
         await this.finalizeLeagueRound(client, round.round_id);
         await client.query("update jh_league_rounds set status='finished', finalized_at=now() where round_id=$1", [round.round_id]);
@@ -616,6 +618,9 @@ export class SocialService {
         throw Object.assign(new Error('这段内容不适合公开到好友房'), { statusCode: 400, code: 'LEAGUE_CONTENT_BLOCKED' });
       }
       await client.query('begin');
+      // Serialize scoring with the day close and voting; never hold this lock while awaiting AI.
+      const currentRound = await client.query('select status from jh_league_rounds where round_id=$1 for update', [submission.round_id]);
+      if (!currentRound.rowCount) throw Object.assign(new Error('本局已不存在'), { statusCode: 404 });
       await client.query(`update jh_league_submissions set judge_status='ready',ai_score=$2,tag=$3,verdict=$4,judged_at=now()
         where submission_id=$1`, [existing.rows[0].submission_id, judged.data.score, judged.data.tag, judged.data.verdict]);
       const played = await client.query(`select count(*)::int count from jh_league_submissions s
@@ -623,7 +628,7 @@ export class SocialService {
       const count = Number(played.rows[0]?.count || 0);
       const keys = [`tag:${judged.data.tag}`, ...(count >= 1 ? ['league:first'] : []), ...(count >= 3 ? ['league:streak-3'] : []), ...(count >= 7 ? ['league:season-7'] : [])];
       for (const key of keys) await client.query(`insert into jh_league_unlocks (visitor_id,unlock_key) values ($1,$2) on conflict do nothing`, [visitorId, key]);
-      if (submission.round_status === 'finished') await this.finalizeLeagueRound(client, submission.round_id);
+      if (currentRound.rows[0].status === 'finished') await this.finalizeLeagueRound(client, submission.round_id);
       await client.query("update jh_rooms set expires_at=now()+interval '30 days',updated_at=now() where room_id=$1", [submission.room_id]);
       await client.query('update jh_league_members set last_active_at=now() where member_id=$1', [submission.member_id]);
       await client.query('commit');
@@ -642,15 +647,27 @@ export class SocialService {
     if (!UUID_RE.test(submissionId)) throw Object.assign(new Error('投票目标无效'), { statusCode: 400 });
     const { member, round } = await this.getLeagueContext(code, visitorId);
     if (!member || !round || round.status !== 'open') throw Object.assign(new Error('当前不能投票'), { statusCode: 403 });
-    const own = await this.query("select 1 from jh_league_submissions where round_id=$1 and member_id=$2 and judge_status='ready'", [round.round_id, member.member_id]);
-    if (!own.rowCount) throw Object.assign(new Error('先完成今日作答才能投票'), { statusCode: 403 });
-    const target = await this.query(`select s.submission_id,s.member_id from jh_league_submissions s
-      where s.submission_id=$1 and s.round_id=$2 and s.judge_status='ready' and s.hidden=false`, [submissionId, round.round_id]);
-    if (!target.rowCount) throw Object.assign(new Error('答案不存在或已隐藏'), { statusCode: 404 });
-    if (target.rows[0].member_id === member.member_id) throw Object.assign(new Error('不能给自己投票'), { statusCode: 400 });
-    await this.query(`insert into jh_league_votes (round_id,voter_member_id,submission_id)
-      values ($1,$2,$3) on conflict (round_id,voter_member_id)
-      do update set submission_id=excluded.submission_id,updated_at=now()`, [round.round_id, member.member_id, submissionId]);
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const current = await client.query('select status,round_date from jh_league_rounds where round_id=$1 for update', [round.round_id]);
+      if (!current.rowCount || current.rows[0].status !== 'open' || dateKey(current.rows[0].round_date) !== shanghaiDate(this.now())) {
+        throw Object.assign(new Error('本局已锁榜，当前不能投票'), { statusCode: 403 });
+      }
+      const own = await client.query("select 1 from jh_league_submissions where round_id=$1 and member_id=$2 and judge_status='ready'", [round.round_id, member.member_id]);
+      if (!own.rowCount) throw Object.assign(new Error('先完成今日作答才能投票'), { statusCode: 403 });
+      const target = await client.query(`select s.submission_id,s.member_id from jh_league_submissions s
+        where s.submission_id=$1 and s.round_id=$2 and s.judge_status='ready' and s.hidden=false`, [submissionId, round.round_id]);
+      if (!target.rowCount) throw Object.assign(new Error('答案不存在或已隐藏'), { statusCode: 404 });
+      if (target.rows[0].member_id === member.member_id) throw Object.assign(new Error('不能给自己投票'), { statusCode: 400 });
+      await client.query(`insert into jh_league_votes (round_id,voter_member_id,submission_id)
+        values ($1,$2,$3) on conflict (round_id,voter_member_id)
+        do update set submission_id=excluded.submission_id,updated_at=now()`, [round.round_id, member.member_id, submissionId]);
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally { client.release(); }
     return this.leagueRoom(code, visitorId);
   }
 

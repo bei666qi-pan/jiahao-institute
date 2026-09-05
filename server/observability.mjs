@@ -15,8 +15,11 @@ const PRODUCT_EVENT_NAMES = new Set([
   'room_created', 'room_joined', 'league_room_created', 'league_joined',
   'league_submission_completed', 'league_vote_cast', 'league_reported',
   'league_season_started', 'league_invite_shared',
+  'scene_started', 'scene_turn_completed', 'scene_completed', 'scene_recipient_completed',
+  'scene_replayed', 'scene_share_confirmed', 'scene_share_copied', 'scene_share_cancelled',
+  'scene_share_revoked', 'scene_card_downloaded',
 ]);
-const PRODUCT_PROPERTY_KEYS = new Set(['mode', 'source', 'roomType', 'game', 'schemaVersion', 'outcome', 'character', 'roundDay']);
+const PRODUCT_PROPERTY_KEYS = new Set(['mode', 'source', 'roomType', 'game', 'schemaVersion', 'outcome', 'character', 'roundDay', 'sceneId', 'turn', 'status', 'fromShare']);
 
 const RANGE_OPTIONS = {
   '24h': { milliseconds: 24 * 60 * 60 * 1000, bucket: 'hour' },

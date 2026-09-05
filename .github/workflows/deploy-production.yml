@@ -17,6 +17,22 @@ jobs:
     name: Release gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TEST_DATABASE_URL: postgres://jiahao_test:jiahao_test@127.0.0.1:5432/jiahao_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: jiahao_test
+          POSTGRES_PASSWORD: jiahao_test
+          POSTGRES_DB: jiahao_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jiahao_test -d jiahao_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout release commit
         uses: actions/checkout@v4
@@ -175,7 +191,7 @@ jobs:
             --header 'Content-Type: application/json' \
             --data "${payload}" \
             "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}" >/tmp/coolify-pin.json
-          echo "Coolify pin response: $(cat /tmp/coolify-pin.json)"
+          echo "Coolify accepted the commit pin request."
 
           pinned=$(curl --silent --show-error --fail \
             --header "Authorization: Bearer ${COOLIFY_API_KEY}" \
@@ -187,6 +203,16 @@ jobs:
             exit 1
           fi
           echo "Coolify application pinned to ${pinned_commit}."
+
+      - name: Setup release configuration runtime
+        if: steps.release.outputs.deployed == 'pending'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify runtime release identity before deploying
+        if: steps.release.outputs.deployed == 'pending'
+        run: node scripts/set-release-version.mjs
 
       - name: Trigger Coolify deployment
         if: steps.release.outputs.deployed == 'pending'
@@ -254,7 +280,7 @@ jobs:
               echo "Coolify application commit drifted to ${app_commit:-missing}; expected ${TARGET_SHA}." >&2
               exit 1
             fi
-            if [[ "${app_status}" == *healthy* ]]; then
+            if [[ "${app_status}" == "running:healthy" ]]; then
               application_healthy=true
               break
             fi
@@ -276,15 +302,15 @@ jobs:
               "${PRODUCTION_URL%/}/healthz" || true)
             echo "Runtime release probe ${attempt}/36 HTTP ${health_code}: $(cat /tmp/release-health.json 2>/dev/null || true)"
             if [ "${health_code}" = '200' ] \
-              && jq -e --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" \
-                '.status == "ok" and .quoteServiceVersion == $version' /tmp/release-health.json >/dev/null 2>&1; then
+              && jq -e --argjson version "${EXPECTED_QUOTE_SERVICE_VERSION}" --arg sha "${TARGET_SHA}" \
+                '.status == "ok" and .quoteServiceVersion == $version and .commitSha == $sha' /tmp/release-health.json >/dev/null 2>&1; then
               runtime_matches=true
               break
             fi
             sleep 10
           done
           if [ "${runtime_matches}" != 'true' ]; then
-            echo "Production runtime did not expose quote service version ${EXPECTED_QUOTE_SERVICE_VERSION}." >&2
+            echo "Production runtime did not expose target commit ${TARGET_SHA} and quote service version ${EXPECTED_QUOTE_SERVICE_VERSION}." >&2
             exit 1
           fi
 

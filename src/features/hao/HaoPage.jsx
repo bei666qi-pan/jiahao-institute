@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { AiProgress } from '../../components/AiProgress';
 import { JiahaoPortrait } from '../../components/JiahaoPortrait';
 import { makeFallbackAssessment } from '../../validation';
+import { ScenePicker } from '../scenes/ScenePicker';
 import { trackProductEvent } from '../../telemetry';
 
 const QUOTE_LEVELS = ['豪气初现', '豪气逼人', '豪气冲天', '自在极意豪'];
@@ -190,6 +191,9 @@ export function HaoPage({ onNavigate, onRoomOpen }) {
     }).catch(() => {});
     return () => { active = false; };
   }, []);
+  const [scenesEnabled,setScenesEnabled]=useState(false);
+  const [scenes,setScenes]=useState([]);
+  useEffect(()=>{apiRequest('/api/scenes').then(v=>{setScenesEnabled(v.enabled===true);setScenes(v.scenes||[])}).catch(()=>{});},[]);
   const focusQuote = () => {
     document.getElementById('hao-quote-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.setTimeout(() => quoteInputRef.current?.focus(), 320);
@@ -197,10 +201,11 @@ export function HaoPage({ onNavigate, onRoomOpen }) {
 
   return <main className="hao-page">
     <FeedbackEntry/>
-    <header className="hao-hero league-first-hero"><div className="hao-hero-copy"><h1 aria-label="每天一句，七天决出嘉豪之神"><span>每天一句</span><span>七天决出嘉豪之神</span></h1><p>发到微信群，好友 30 秒同题作答。AI 先判，群友再投，每晚锁榜。</p><div className="hero-actions"><button type="button" className="primary-button" onClick={() => activeLeague ? onRoomOpen(activeLeague.code) : onNavigate('friends')}>{activeLeague ? '回到今天的好友联赛' : '创建 7 日好友联赛'} <Icon name="arrow"/></button><button type="button" className="outline-button" onClick={() => onNavigate('friends')}>输入房间码</button></div><small className="league-privacy-line"><Icon name="lock" size={15}/> 免注册 · 答案只对房间成员可见 · 赛季后 7 天删除原句</small></div><figure className="hao-hero-media"><img src="/assets/jiahao/hao-universe-hero.webp" alt="巷子里笑得很开心的嘉豪" width="960" height="1200" fetchPriority="high"/><figcaption>今天这题，你最有戏。</figcaption></figure></header>
+    <header className="hao-hero league-first-hero"><div className="hao-hero-copy"><h1 aria-label={scenesEnabled ? "他说没开滤镜。门框先弯了。" : "每天一句，七天决出嘉豪之神"}>{scenesEnabled ? <><span>他说没开滤镜。</span><span>门框先弯了。</span></> : <><span>每天一句</span><span>七天决出嘉豪之神</span></>}</h1><p>{scenesEnabled ? "拆穿他，还是帮他圆？你来接一句。" : "发到微信群，好友 30 秒同题作答。AI 先判，群友再投，每晚锁榜。"}</p><div className="hero-actions"><button type="button" className="primary-button" onClick={() => scenesEnabled ? onNavigate('scenes','photo') : activeLeague ? onRoomOpen(activeLeague.code) : onNavigate('friends')}>{scenesEnabled ? '先接一招' : activeLeague ? '回到今天的好友联赛' : '创建 7 日好友联赛'} <Icon name="arrow"/></button><button type="button" className="outline-button" onClick={() => onNavigate('friends','join')}>输入房间码</button></div><small className="league-privacy-line"><Icon name="lock" size={15}/> {scenesEnabled ? "不用注册 · 聊三轮 · 分享前由你确认" : "免注册 · 答案只对房间成员可见 · 赛季后 7 天删除原句"}</small></div><figure className="hao-hero-media"><img src="/assets/jiahao/hao-universe-hero.webp" alt="巷子里笑得很开心的嘉豪" width="960" height="1200" fetchPriority="high"/><figcaption>这事你碰到过吗？</figcaption></figure></header>
+    {scenesEnabled ? <ScenePicker scenes={scenes} onChoose={id=>onNavigate('scenes',id)}/> : null}
     <section className="free-play-heading"><span>FREE PLAY</span><h2>自由玩</h2><p>不想等好友？单人鉴定、语录和图片创作都还在。</p><button type="button" className="outline-button" onClick={() => onNavigate('assay')}>去做嘉豪鉴定 <Icon name="arrow"/></button></section>
     <HaoQuoteStudio inputRef={quoteInputRef}/>
-    <section className="hao-play-rail"><article><div><h2>和好友比一局</h2><p>双方各出一句话，看看谁更豪。</p></div><button type="button" className="outline-button" onClick={() => setPkOpen((value) => !value)} aria-expanded={pkOpen}>{pkOpen ? '收起 PK' : '双人豪气 PK'} <Icon name="arrow"/></button></article><article className="hao-archive-door"><JiahaoPortrait variant={2} label="经典嘉豪人物图鉴预览" className="hao-archive-preview"/><div><h2>嘉豪出没图鉴</h2><p>六种嘉豪状态，原来的经典人物都在。</p></div><button type="button" className="outline-button" onClick={() => onNavigate('archive')}>去看图鉴 <Icon name="arrow"/></button></article></section>
+    <section className="hao-play-rail"><article><div><h2>和好友比一局</h2><p>双方各出一句话，看看谁更豪。</p></div><button type="button" className="outline-button" onClick={() => setPkOpen((value) => !value)} aria-expanded={pkOpen}>{pkOpen ? '收起 PK' : '双人豪气 PK'} <Icon name="arrow"/></button></article><article className="hao-archive-door"><JiahaoPortrait variant={2} label="经典嘉豪人物图鉴预览" className="hao-archive-preview"/><div><h2>嘉豪出没图鉴</h2><p>六种嘉豪状态，原来的经典人物都在。</p></div><button type="button" className="outline-button" onClick={() => onNavigate('archive','preview')}>去看图鉴 <Icon name="arrow"/></button></article></section>
     <HaoPkArena open={pkOpen} onToggle={() => setPkOpen((value) => !value)}/>
   </main>;
 }
