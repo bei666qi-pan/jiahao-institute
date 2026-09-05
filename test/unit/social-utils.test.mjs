@@ -13,6 +13,7 @@ import {
 test('数据库 DATE 对象稳定还原为赛季日期', () => {
   assert.equal(dateKey(new Date('2026-09-04T00:00:00.000Z')), '2026-09-04');
   assert.equal(dateKey('2026-09-04'), '2026-09-04');
+  assert.equal(dateKey(new Date(2026, 8, 4)), '2026-09-04');
 });
 
 const result = {
@@ -121,6 +122,7 @@ test('跨日锁榜后的失败答案仍能按原题重判并重算当天积分',
       statements.push(normalized);
       if (normalized.includes("s.judge_status in ('pending','failed')")) return { rowCount: 1, rows: [{ submission_id: submissionId, answer_text: '昨天的答案', judge_status: 'failed', member_id: memberId, round_id: roundId, prompt_text: '昨天的问题', character: 'jiahao', round_status: 'finished', season_id: seasonId, room_id: roomId }] };
       if (normalized.includes('pg_try_advisory_lock')) return { rowCount: 1, rows: [{ locked: true }] };
+      if (normalized.startsWith('select status from jh_league_rounds')) return { rowCount: 1, rows: [{ status: 'finished' }] };
       if (normalized.includes('where submission_id=$1') && normalized.startsWith('select submission_id')) return { rowCount: 1, rows: [{ submission_id: submissionId, answer_text: '昨天的答案', judge_status: 'failed' }] };
       if (normalized.includes('select count(*)::int count')) return { rowCount: 1, rows: [{ count: 1 }] };
       if (normalized.startsWith('select s.submission_id, s.ai_score')) return { rowCount: 1, rows: [{ submission_id: submissionId, ai_score: 91, vote_count: 0 }] };

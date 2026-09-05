@@ -13,6 +13,22 @@ jobs:
     # Cold npm cache installs can exceed five minutes on GitHub-hosted runners.
     # Keep the timeout above the install phase so failures represent the tests.
     timeout-minutes: 15
+    env:
+      TEST_DATABASE_URL: postgres://jiahao_test:jiahao_test@127.0.0.1:5432/jiahao_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: jiahao_test
+          POSTGRES_PASSWORD: jiahao_test
+          POSTGRES_DB: jiahao_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jiahao_test -d jiahao_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

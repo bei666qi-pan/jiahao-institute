@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+// 原玩法回归在小剧场关闭模式下运行；新主入口由 scenes.spec.mjs 覆盖。
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/scenes', route => route.fulfill({ json: { enabled: false, scenes: [] } }));
+});
+
 const assessment = {
   schemaVersion: 2,
   id: '嘉豪-E2E0001',

@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+// 原玩法回归在小剧场关闭模式下运行；新主入口由 scenes.spec.mjs 覆盖。
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/scenes', route => route.fulfill({ json: { enabled: false, scenes: [] } }));
+});
+
 const baseRoom = {
   room: { code: 'H7K9P2Q', name: '测试抽象联赛', roomType: 'league', memberLimit: 12, memberCount: 2, isOwner: false, status: 'active' },
   season: { number: 1, startDate: '2026-09-04', endDate: '2026-09-10', status: 'active', day: 1 },
@@ -12,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/telemetry/**', route => route.fulfill({ status: 202, contentType: 'application/json', body: '{}' }));
 });
 
-test('首页把七日好友联赛作为唯一主行动', async ({ page }) => {
+test('小剧场关闭时首页保留七日好友联赛主行动', async ({ page }) => {
   await page.route('**/api/social/session', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, leagueEnabled: true, rooms: [] }) }));
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' })).toBeVisible();

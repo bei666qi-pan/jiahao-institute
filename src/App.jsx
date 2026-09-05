@@ -10,6 +10,7 @@ import { LabPage } from './features/lab/LabPage';
 import { FriendsPage } from './features/friends/FriendsPage';
 import { ArchivePage } from './features/archive/ArchivePage';
 import { HaoPage } from './features/hao/HaoPage';
+import { ScenePage } from './features/scenes/ScenePage';
 import './editorial.css';
 import './hao-universe.css';
 
@@ -50,8 +51,10 @@ function MediaGenerationDock({ job, onOpen, onDismiss }) {
 
 export default function App() {
   const initialRoomCode = routeRoomCode();
+  const [scenePath, setScenePath] = useState(() => window.location.pathname);
+  const [entryIntent,setEntryIntent] = useState('');
   const [roomCode, setRoomCode] = useState(initialRoomCode);
-  const [page, setPage] = useState(() => initialRoomCode ? 'friends' : 'hao');
+  const [page, setPage] = useState(() => initialRoomCode ? 'friends' : /^\/(play|s)\//.test(window.location.pathname) ? 'scenes' : 'hao');
   const [result, setResult] = useState(null);
   const mediaTask = useMemo(() => createMediaGenerationTask({
     generateImage: (input) => postJson('/api/images/generate', input, { signal: AbortSignal.timeout(360_000) }),
@@ -71,14 +74,17 @@ export default function App() {
     const onPopState = () => {
       const code = routeRoomCode();
       setRoomCode(code);
-      if (code) setPage('friends');
+      setScenePath(window.location.pathname);
+      setPage(code ? 'friends' : /^\/(play|s)\//.test(window.location.pathname) ? 'scenes' : 'hao');
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   const navigate = (nextPage, target = '') => {
-    const nextUrl = target === 'studio' ? '/#character-studio' : '/';
+    const nextUrl = nextPage === 'scenes' ? `/play/${target || 'photo'}` : target === 'studio' ? '/#character-studio' : '/';
+    setScenePath(nextUrl);
+    setEntryIntent(target);
     if (`${window.location.pathname}${window.location.hash}` !== nextUrl) window.history.pushState({}, '', nextUrl);
     setRoomCode('');
     setPage(nextPage);
@@ -126,9 +132,10 @@ export default function App() {
     {page === 'assay' && !result ? <AssayPage onComplete={completeAssessment} onNavigate={navigate}/> : null}
     {page === 'lab' ? <LabPage latestResult={latestResult} onNavigate={navigate} onReactionComplete={applyReaction} mediaTask={mediaTask} mediaJob={mediaJob}/> : null}
     {page === 'hao' ? <HaoPage onNavigate={navigate} onRoomOpen={openRoom}/> : null}
-    {page === 'friends' ? <FriendsPage roomCode={roomCode} latestResult={latestResult} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
-    {page === 'archive' ? <ArchivePage history={history} onSelectHistory={(item) => { setResult(item); setPage('assay'); window.scrollTo({ top: 0 }); }} onClear={clear}/> : null}
-    <footer className="editorial-footer"><strong>豪气宇宙</strong><span>原始内容不保存，结果仅供娱乐。</span></footer>
+    {page === 'scenes' ? <ScenePage key={scenePath} sceneId={scenePath.match(/^\/play\/([^/]+)/)?.[1]} shareCode={scenePath.match(/^\/s\/([^/]+)/)?.[1]} onNavigate={navigate}/> : null}
+    {page === 'friends' ? <FriendsPage entryIntent={entryIntent} roomCode={roomCode} latestResult={latestResult} onNavigate={navigate} onRoomOpen={openRoom}/> : null}
+    {page === 'archive' ? <ArchivePage preview={entryIntent === 'preview'} history={history} onSelectHistory={(item) => { setResult(item); setPage('assay'); window.scrollTo({ top: 0 }); }} onClear={clear}/> : null}
+    <footer className="editorial-footer"><strong>豪气宇宙</strong><span>AI 内容仅供娱乐；分享前请确认公开范围。</span></footer>
     <MediaGenerationDock job={mediaJob} onOpen={openMediaStudio} onDismiss={mediaTask.dismiss}/>
     <MobileNav page={page} onNavigate={navigate}/>
   </div>;

@@ -9,6 +9,8 @@ export async function apiRequest(path, options = {}) {
     const error = new Error(payload.error || '服务暂时不可用，请稍后再试');
     error.status = response.status;
     error.code = payload.code;
+    error.retryable = payload.retryable;
+    error.runExpired = payload.runExpired;
     error.activeTaskId = payload.activeTaskId;
     throw error;
   }

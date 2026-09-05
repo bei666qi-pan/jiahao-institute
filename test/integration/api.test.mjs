@@ -55,6 +55,24 @@ test.after(() => {
 });
 
 // === Health Check ===
+test('GET /healthz exposes injected release identity without unrelated environment fields', async () => {
+  const previous = { sha: process.env.APP_COMMIT_SHA, version: process.env.APP_VERSION };
+  try {
+    process.env.APP_COMMIT_SHA = 'b'.repeat(40);
+    process.env.APP_VERSION = 'release-2026.09';
+    const { status, body } = await fetchJson(`${serverUrl}/healthz`);
+    assert.equal(status, 200);
+    assert.equal(body.commitSha, 'b'.repeat(40));
+    assert.equal(body.appVersion, 'release-2026.09');
+    assert.equal(body.DATABASE_URL, undefined);
+  } finally {
+    if (previous.sha === undefined) delete process.env.APP_COMMIT_SHA;
+    else process.env.APP_COMMIT_SHA = previous.sha;
+    if (previous.version === undefined) delete process.env.APP_VERSION;
+    else process.env.APP_VERSION = previous.version;
+  }
+});
+
 test('GET /healthz returns ok status', async () => {
   const { status, body } = await fetchJson(`${serverUrl}/healthz`);
   assert.equal(status, 200);

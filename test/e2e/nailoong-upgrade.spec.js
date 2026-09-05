@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+// 原玩法回归在小剧场关闭模式下运行；新主入口由 scenes.spec.mjs 覆盖。
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/scenes', route => route.fulfill({ json: { enabled: false, scenes: [] } }));
+});
+
 test('根路径以豪气宇宙为首页并把嘉豪与奶龙玩法分开', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '每天一句，七天决出嘉豪之神' })).toBeVisible();

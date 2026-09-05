@@ -1,123 +1,70 @@
-# 嘉豪鉴定所 测试体系
+# 候选版本启动与验证
 
-## 测试架构概览
+当前状态：**本地有限试玩候选通过独立评审，待发布验证；文档整体修订已复验，首轮数量遵循与课堂泄底仍有弱点**。详见 [角色动作迭代记录](docs/mechanics-iteration.md)。历史失败记录保留：[初版](docs/solo-scene-iteration.md)、[日常场景](docs/daily-scenes-iteration.md)、[角色喜剧](docs/character-comedy-iteration.md)。
 
-```
-test/
-├── core.test.mjs                    # 核心功能测试（validation, normalization, PK）
-├── observability.test.mjs           # 观测与成本计算测试
-├── unit/                            # 单元测试
-│   ├── frontend.test.mjs            # 前端纯函数（hashString, clamp, analyze, makeFallback*）
-│   ├── server-utils.test.mjs        # 后端工具（extractJson, cleanText, normalize*, getProvider）
-│   ├── observability-utils.test.mjs # 观测工具（finiteNonNegative, cookie, deviceCategory, metric）
-│   ├── admin-app-utils.test.mjs     # 管理后台工具（formatNumber, formatCost, currentView）
-│   └── admin-auth-extended.test.mjs # 认证模块（sameOrigin, currentAttempt, rate limiting）
-├── integration/                     # 集成测试
-│   ├── api.test.mjs                 # HTTP 接口测试（路由、状态码、安全头）
-│   ├── full-chain.test.mjs          # 全链路测试（Mock模型服务器 + 真实HTTP服务）
-│   └── security-edge-cases.test.mjs # 安全与边缘测试（CSRF、速率限制、大body、空body）
-├── e2e/                             # 端到端测试
-│   ├── app.spec.js                  # 基础E2E（页面加载、响应式、无障碍、导航）
-│   └── app-deep.spec.js            # 深度E2E（PK流程、历史记录、海报、图鉴、Admin）
-├── helpers/                         # 测试辅助
-│   ├── mock-model-server.mjs        # Mock LLM服务器（模拟DeepSeek/Ark API）
-│   └── ai-test-analyzer.mjs         # AI测试覆盖率分析工具
-├── fixtures/                        # 测试夹具（预留）
-└── helpers/                         # 测试辅助（预留）
-```
+## 启动
 
-## 测试统计
+工作区 `/Users/qi/Desktop/项目/嘉豪-solo-scene`，分支 `codex/solo-scene-upgrade`。
 
-| 层级 | 文件 | 测试数 |
-|------|------|--------|
-| **单元测试** | 7 个文件 | **187** |
-| **集成测试** | 3 个文件 | **41** |
-| **E2E 测试** | 2 个文件 | **20** |
-| **总计** | **12 个文件** | **248** ✅ |
-
-### 单元测试明细
-
-| 文件 | 测试数 | 覆盖内容 |
-|------|--------|----------|
-| `frontend.test.mjs` | 47 | hashString, clamp, isAcceptedFile, validateFiles, decideFallbackWinner, analyze, makeFallbackPk, makeFallbackQuote |
-| `server-utils.test.mjs` | 49 | extractJson, cleanText, clampServer, normalizeResult, normalizePkResult, validImages, getProvider, cookie |
-| `observability-utils.test.mjs` | 30 | finiteNonNegative, integerOrNull, parseCookies, cleanPath, referrerHost, deviceCategory, number, percentChange, metric, hashToken, digest, clientKey |
-| `admin-app-utils.test.mjs` | 21 | formatNumber, formatDuration, formatCost, formatTime, currentView, changeValue, metricCalc, NAV integrity |
-| `admin-auth-extended.test.mjs` | 28 | sameOrigin, clientKey, safePasswordEqual, hashToken, currentAttempt (rate limiting), loginAdmin flow, digest |
-| `core.test.mjs` | 6 | validateFiles, decideFallbackWinner, normalizeResult, normalizePkResult, validImages |
-| `observability.test.mjs` | 6 | parseUsage, calculateEstimatedCost, activeDeltaSeconds, getRangeConfig, encodeCursor/decodeCursor, safePasswordEqual |
-
-### 集成测试明细
-
-| 文件 | 测试数 | 覆盖内容 |
-|------|--------|----------|
-| `api.test.mjs` | 18 | 所有HTTP路由、SPA回退、安全头、错误处理 |
-| `full-chain.test.mjs` | 7 | Mock模型服务器全链路：analyze/pk/quote 完整请求→响应 |
-| `security-edge-cases.test.mjs` | 16 | CSRF保护、速率限制模拟、body边界、非法JSON、空body、Admin认证、Telemetry降级 |
-
-### E2E 测试明细
-
-| 文件 | 测试数 | 覆盖内容 |
-|------|--------|----------|
-| `app.spec.js` | 12 | 首页渲染、页脚、导航切换、文字鉴定全流程、语录生成全流程、响应式设计、无障碍、meta标签、控制台错误 |
-| `app-deep.spec.js` | 8 | 双人PK流程、物种图鉴交互、鉴定历史、海报生成、重置、语录预设、Admin登录页、多页面快速切换 |
-
-## 测试命令
-
-| 命令 | 说明 |
-|------|------|
-| `npm test` | 运行所有单元测试（187个） |
-| `npm run test:unit` | 运行所有单元测试 |
-| `npm run test:integration` | 运行所有集成测试（41个） |
-| `npm run test:all` | 运行单元测试 + 集成测试（228个） |
-| `npm run test:e2e` | 运行 Playwright E2E 测试（20个） |
-| `npm run test:e2e:ui` | 以 UI 模式运行 E2E 测试 |
-| `npm run test:coverage` | 运行 AI 测试覆盖率分析 |
-| `PRODUCTION_SMOKE=true npx playwright test test/e2e/production-quote.spec.js --project=desktop-chromium` | 对生产站运行真实模型语录矩阵 E2E |
-
-## 本地测试运行
-
-```bash
-# 安装依赖
-npm install
-npx playwright install chromium
-
-# 运行所有单元测试 + 集成测试
-npm run test:all
-
-# 运行 E2E 测试（需要先构建）
+```sh
+cd /Users/qi/Desktop/项目/嘉豪-solo-scene
 npm run build
-npm run test:e2e
-
-# 以 UI 模式调试 E2E
-npm run test:e2e:ui
-
-# 运行 AI 覆盖率分析
-npm run test:coverage
+PORT=5194 DOTENV_CONFIG_PATH=.env.local npm start
 ```
 
-## CI/CD
+本机启动显式指定 `PORT=5194`；沿用隔离 PostgreSQL、独立签名密钥和已有模型服务配置，不提交 `.env.local`。其他机器从 `.env.example` 配置自己的测试数据库、随机 `SOCIAL_SIGNING_SECRET`、模型凭据和 `PORT`。依赖使用已有安装；全新克隆先 `npm ci`。
 
-GitHub Actions 工作流配置于 `.github/workflows/test.yml`，在 push/PR 到主分支时自动运行：
-- **unit** job：运行所有单元测试 + 集成测试（228个）
-- **e2e** job：构建项目，安装 Chromium，运行 E2E 测试（20个）
+如本轮隔离数据库停止，可用已有 PostgreSQL 工具恢复（不要对其他数据库初始化或清空）：
 
-## 测试策略
+```sh
+pg_ctl -D /tmp/jiahao-solo-pg -l /tmp/jiahao-solo-evidence/postgres.log -o '-h 127.0.0.1 -p 55439 -k /tmp' start
+```
 
-1. **纯函数优先**：核心逻辑通过纯函数实现，易于单独测试
-2. **Mock 全链路**：使用 Mock LLM 服务器验证从请求→模型→归一化→响应的完整链路
-3. **安全边界覆盖**：CSRF保护、速率限制、body大小限制、非法输入处理
-4. **E2E 关键路径**：文字鉴定、PK对决、语录生成、海报生成、物种图鉴、Admin观测台
-5. **AI 辅助分析**：`ai-test-analyzer.mjs` 自动扫描源码导出函数，对比已测试函数，生成覆盖率缺口报告
+浏览器访问 http://127.0.0.1:5194 。本站分享链接是本机地址，测试接收方请用同一电脑的另一个浏览器身份。没有生产发布。
 
-## 测试覆盖率缺口（已知）
+## 自动回归
 
-以下为前端React组件，需要在浏览器环境（jsdom）中测试，当前通过 E2E 测试间接覆盖：
-- App.jsx 渲染组件（Icon, Radar, Modal, PosterModal等）
-- fileProcessing.js 浏览器API（imageFileToDataUrl, readDocx, readPdf）
-- telemetry.js 浏览器API（post, startTelemetry）
-- AdminApp.jsx 渲染组件
+```sh
+npm run test:unit
+TEST_DATABASE_URL=postgresql://jiahao_test@127.0.0.1:55439/jiahao_final_regression npm run test:integration
+PLAYWRIGHT_PORT=5194 npx playwright test --workers=2
+PLAYWRIGHT_PORT=5194 npx playwright test test/e2e/scenes.spec.mjs test/e2e/league-recovery.spec.js --workers=2
+```
 
-以下为依赖PostgreSQL数据库的功能，通过Mock服务器间接测试：
-- Observability 数据库方法（recordSession, heartbeat, overview等）
-- admin-auth 数据库方法（loginAdmin, verifyAdmin, logoutAdmin）
+数据库集成测试必须配置独立 TEST_DATABASE_URL；缺失数据库而跳过不能算通过。集成文件串行执行，避免共享测试库首次迁移竞争。普通自动化使用受控模型夹具验证协议和恢复，不能替代真实模型内容验收。界面用例在桌面和手机运行；生产冒烟默认不运行，手机专用构图在桌面跳过。测试运行期间不要同时重新构建 dist。
+
+也可用 `npx playwright test --config playwright.scenes.config.mjs` 启动独立 Vite 界面夹具检查。
+
+## 真实玩家操作适配器
+
+适配器只允许本机真实业务接口。它保留匿名 Cookie、签名状态和请求幂等键，输出仅包含玩家可见信息。会话文件含凭据，放仓库外；可见轨迹为同名 `.visible.jsonl`。不提供隐藏记忆、内部提示或标准答案。
+
+```sh
+export PLAYTEST_URL=http://127.0.0.1:5194
+node scripts/scene-playtest.mjs start /tmp/my-scene.json photo
+node scripts/scene-playtest.mjs say /tmp/my-scene.json '把滤镜关掉再拍一张看看。'
+node scripts/scene-playtest.mjs look /tmp/my-scene.json
+# 阅读真实反馈后，自行决定下一句；不能预写完整探索对话。
+node scripts/scene-playtest.mjs say /tmp/my-scene.json '你的下一句'
+node scripts/scene-playtest.mjs end /tmp/my-scene.json '我认怂，先撤了'
+# 仅失败待恢复时，玩家明确选择重试：
+node scripts/scene-playtest.mjs retry /tmp/my-scene.json
+```
+
+默认每次有效出招一次真实模型调用，单次等待上限30秒；不自动重试消费模型。明确失败的新请求与未决请求使用不同恢复策略。前三回合后不能继续；换场景或重玩用新会话文件。初期外部可见日志的 `status` 被玩法状态覆盖，后续改为 `httpStatus`；原日志保留，不能据前者统计 HTTP 成功率。
+
+## 可复用场景
+
+| 组别 | 初始条件与目标 | 行动边界 | 可接受结果／断言 | 观察 |
+|---|---|---|---|---|
+| 核心 | 新匿名玩家，消息发错群，完成一局 | 自由短答，最多三招 | 回合1→2→3，明确结束；重玩新run；刷新保留 | 回应具体词句并回扣 |
+| 探索 | 偷吃被抓，愿意谈判的玩家 | 只看当前反馈，不读内部状态 | 可以成交、认怂或拒绝，不要求赢 | 数量、计划和行动归属 |
+| 恢复 | 第1招后断网／慢响应／刷新 | 同一未决请求恢复，不并发耗费 | 不推进假回合，不丢输入；相同请求合并 | 错误和等待可理解 |
+| 边界 | 非法结构、重复键、篡改token、换身份 | 单测和真实库夹具，不冒充玩家 | 结构失败无默认结果；串局／越权拒绝 | 失败可恢复 |
+| 分享 | 已完成一局，选择一个回合 | 先预览，确认后公开 | 取消不创建；只选定片段；所有者可撤销 | 卡片独立可读，接收方可玩 |
+| 分享期限 | 测试时钟推进七天 | 明确模拟时间 | 内容清除，仍有同题入口；无所有者凭据 | 不冒充真实七日留存 |
+| 联赛 | 两个测试身份，已知规则 | 提交、投票、显式重判 | 非法判词待重判；零分合法；跨午夜重算不漏分 | 保存提示与服务器一致 |
+| 最终留出 | 合照不愿保留、KTV拒绝唱歌 | 玩家自行改变行动，开发前未用于调优 | 可拒绝、结束；不要求配合剧情 | 本轮两者一致性均未过 |
+| 有限重复 | 游戏空大／迟到各两局 | 保持初始设定和打法 | 展示全部尝试，不能只留最好一局 | 仍有捏造玩家动作 |
+
+本轮已消耗的留出和重复案例都归档；下轮如果针对它们修改，应转回归，并重新留出新的动机与行动组合。独立评审反例包括无关股票回复、万能重复夸奖、未来计划被写成已完成加分；均识别不通过。此项仅证明评审能识别反例，不证明产品有自动语义检查器。
