@@ -11,7 +11,7 @@ test('首页显眼意见反馈入口可键盘打开并真实提交', async ({ pa
   await expect(entry).toBeVisible();
   await entry.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog', { name: '告诉我们哪里还能更好' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '哪儿不好玩？' })).toBeVisible();
   await page.getByLabel('反馈内容').fill('希望视频等待界面更清楚');
   await page.getByRole('button', { name: '提交反馈' }).click();
   await expect(page.getByText('已收到，谢谢你认真告诉我们。')).toBeVisible();

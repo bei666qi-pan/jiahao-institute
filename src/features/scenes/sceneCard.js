@@ -37,9 +37,9 @@ export async function createSceneCard({ scene, moment, ending, closingInput, las
   ctx.fillStyle = '#f2c51d'; ctx.fillRect(100, footerY - 24, 880, 6);
   ctx.drawImage(qr, 760, footerY, 220, 220);
   ctx.fillStyle = '#145bea'; ctx.font = 'bold 40px sans-serif'; ctx.fillText('扫码接同题', 100, footerY + 65);
-  ctx.fillStyle = '#171715'; ctx.font = '30px sans-serif'; ctx.fillText('同一个现场，你会怎么接？', 100, footerY + 118);
+  ctx.fillStyle = '#171715'; ctx.font = '30px sans-serif'; ctx.fillText('同一题，换你会怎么说？', 100, footerY + 118);
   ctx.fillStyle = '#68665e'; ctx.font = '26px sans-serif';
   ctx.fillText(shareUrl ? '挑战链接七天有效' : '仅打开同题 · 未发布原句', 100, footerY + 165);
-  ctx.fillText('豪气宇宙 · AI 即兴演出，仅供娱乐', 100, footerY + 208);
+  ctx.fillText('豪气宇宙 · AI 生成，仅供娱乐', 100, footerY + 208);
   return { canvas, destinationUrl };
 }
