@@ -35,8 +35,8 @@ test('豪气宇宙与抽象实验室并行存在且豪气语录、双人PK可完
   expect((await downloadPromise).suggestedFilename()).toBe('嘉豪语录卡.png');
 
   await page.getByRole('button', { name: /双人豪气 PK/ }).first().click();
-  await page.getByLabel('甲方豪气样本').fill('我一般不解释，懂的都懂。');
-  await page.getByLabel('乙方豪气样本').fill('这波回调只是长期价值的必经之路。');
+  await page.getByLabel('第一句').fill('我一般不解释，懂的都懂。');
+  await page.getByLabel('第二句').fill('这波回调只是长期价值的必经之路。');
   await page.getByLabel('确认双方素材授权').check();
   await page.getByRole('button', { name: /开始豪气 PK/ }).click();
   await expect(page.getByText('乙方豪气胜出')).toBeVisible();
